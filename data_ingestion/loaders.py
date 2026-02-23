@@ -225,6 +225,16 @@ class ETLLoader:
         df["game_id"] = df["game_id"].astype(str)
         df["player_id"] = df["player_id"].astype(str)
 
+        # Keep only stats rows that can join to a known game.
+        game_ids = set(games_df["game_id"].astype(str))
+        before_join_filter = len(df)
+        df = df[df["game_id"].isin(game_ids)].copy()
+        dropped_missing_games = before_join_filter - len(df)
+        if dropped_missing_games:
+            print(
+                f"[ETL] Dropping {dropped_missing_games} player stat rows with game_id not found in games.csv"
+            )
+
         if "player_name" not in df.columns:
             if "first_name" in df.columns and "last_name" in df.columns:
                 full_name = df["first_name"].fillna("").astype(str).str.strip() + " "
@@ -289,12 +299,13 @@ class ETLLoader:
 
             df["team_id"] = df.apply(fill_team_from_home_flag, axis=1)
 
-        if df["team_id"].isna().any():
-            missing = int(df["team_id"].isna().sum())
-            raise ValueError(
-                f"Could not resolve team_id for {missing} player stat rows. "
-                "Ensure team fields exist in stats or teams mapping is loadable from games."
+        unresolved_mask = df["team_id"].isna() | (df["team_id"].astype(str).str.strip().isin({"", "nan"}))
+        unresolved_count = int(unresolved_mask.sum())
+        if unresolved_count:
+            print(
+                f"[ETL] Dropping {unresolved_count} player stat rows with unresolved team mapping"
             )
+            df = df[~unresolved_mask].copy()
 
         df["team_id"] = df["team_id"].astype(str)
 
