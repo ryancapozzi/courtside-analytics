@@ -146,8 +146,14 @@ class ETLLoader:
             if optional_col not in df.columns:
                 df[optional_col] = None
 
-        df["team_id"] = df["team_id"].astype(str)
-        df["team_name"] = df["team_name"].astype(str)
+        df["team_id"] = self._sanitize_string_series(df["team_id"])
+        df["team_name"] = self._sanitize_string_series(df["team_name"])
+        before = len(df)
+        df = df.dropna(subset=["team_id"]).copy()
+        dropped = before - len(df)
+        if dropped:
+            print(f"[ETL] Dropping {dropped} team rows with missing team_id")
+        df["team_name"] = df["team_name"].fillna(df["team_id"])
         df = df.drop_duplicates(subset=["team_id"], keep="first")
         return df
 
@@ -188,8 +194,14 @@ class ETLLoader:
             if optional_col not in df.columns:
                 df[optional_col] = None
 
-        df["player_id"] = df["player_id"].astype(str)
-        df["player_name"] = df["player_name"].astype(str)
+        df["player_id"] = self._sanitize_string_series(df["player_id"])
+        df["player_name"] = self._sanitize_string_series(df["player_name"])
+        before = len(df)
+        df = df.dropna(subset=["player_id"]).copy()
+        dropped = before - len(df)
+        if dropped:
+            print(f"[ETL] Dropping {dropped} player rows with missing player_id")
+        df["player_name"] = df["player_name"].fillna(df["player_id"])
         df = df.drop_duplicates(subset=["player_id"], keep="first")
         return df
 
@@ -222,8 +234,15 @@ class ETLLoader:
         self._ensure_columns(stats_df, required, "player_game_stats")
 
         df = stats_df.copy()
-        df["game_id"] = df["game_id"].astype(str)
-        df["player_id"] = df["player_id"].astype(str)
+        df["game_id"] = self._sanitize_string_series(df["game_id"])
+        df["player_id"] = self._sanitize_string_series(df["player_id"])
+        before_required = len(df)
+        df = df.dropna(subset=["game_id", "player_id"]).copy()
+        dropped_required = before_required - len(df)
+        if dropped_required:
+            print(
+                f"[ETL] Dropping {dropped_required} player stat rows with missing game_id or player_id"
+            )
 
         # Keep only stats rows that can join to a known game.
         game_ids = set(games_df["game_id"].astype(str))
@@ -307,7 +326,7 @@ class ETLLoader:
             )
             df = df[~unresolved_mask].copy()
 
-        df["team_id"] = df["team_id"].astype(str)
+        df["team_id"] = self._sanitize_string_series(df["team_id"])
 
         for numeric_col in [
             "minutes",
@@ -383,7 +402,8 @@ class ETLLoader:
 
         rows = teams_df[
             ["team_id", "team_name", "abbreviation", "city", "conference", "division"]
-        ].fillna(value=pd.NA)
+        ]
+        rows = self._to_sql_rows(rows)
 
         sql = """
         INSERT INTO teams (team_id, team_name, abbreviation, city, conference, division)
@@ -406,6 +426,7 @@ class ETLLoader:
         rows = players_df[["player_id", "player_name", "first_name", "last_name", "position"]].fillna(
             value=pd.NA
         )
+        rows = self._to_sql_rows(rows)
 
         sql = """
         INSERT INTO players (player_id, player_name, first_name, last_name, position)
@@ -425,6 +446,7 @@ class ETLLoader:
         self._ensure_columns(seasons_df, required, "seasons")
 
         rows = seasons_df[["season_label", "start_year", "end_year"]]
+        rows = self._to_sql_rows(rows)
 
         sql = """
         INSERT INTO seasons (season_label, start_year, end_year)
@@ -466,6 +488,7 @@ class ETLLoader:
                 "winner_team_id",
             ]
         ]
+        rows = self._to_sql_rows(rows)
 
         sql = """
         INSERT INTO games (
@@ -547,6 +570,7 @@ class ETLLoader:
                 "defensive_rebounds",
             ]
         ]
+        rows = self._to_sql_rows(rows)
 
         sql = """
         INSERT INTO player_game_stats (
@@ -631,6 +655,18 @@ class ETLLoader:
         if "pre" in text:
             return "preseason"
         return text.replace(" ", "_")
+
+    def _to_sql_rows(self, frame: pd.DataFrame) -> pd.DataFrame:
+        # psycopg cannot adapt pandas NA/NaN scalar types directly.
+        return frame.astype(object).where(pd.notna(frame), None)
+
+    def _sanitize_string_series(self, series: pd.Series) -> pd.Series:
+        cleaned = series.astype("string").str.strip().str.lower()
+        invalid = {"", "nan", "none", "null", "<na>", "na"}
+        mask_invalid = cleaned.isna() | cleaned.isin(invalid)
+        out = series.astype("string").str.strip()
+        out = out.mask(mask_invalid, pd.NA)
+        return out
 
     def _executemany(self, conn: psycopg.Connection, sql: str, rows: Iterable[tuple]) -> None:
         iterator = iter(rows)
