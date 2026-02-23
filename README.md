@@ -46,5 +46,15 @@ Agentic NBA analytics assistant that answers natural-language basketball questio
 4. Run data audit:
    - `make audit-db`
 
+## Quick Demo Path
+1. Load bundled sample CSVs:
+   - `make sample-data`
+2. Build DB + load + audit:
+   - `make setup-db`
+   - `make load-data`
+   - `make audit-db`
+3. Ask a question:
+   - `courtside ask "How did the Atlanta Hawks perform when Trae Young scored more than 25 points?"`
+
 ## Current Status
 This repository is now scaffolded for the agreed Plan v4 and ready for iterative implementation and evaluation.

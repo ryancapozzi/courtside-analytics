@@ -29,3 +29,8 @@ Audit checks include:
 - number of distinct seasons
 - orphan stat rows
 - games missing scores
+
+## Bundled sample data
+For a quick end-to-end smoke test without external downloads:
+- `make sample-data`
+- then run setup/load/audit commands above

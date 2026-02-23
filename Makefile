@@ -1,4 +1,4 @@
-.PHONY: install lint test run-cli setup-db load-data audit-db profile-source
+.PHONY: install lint test run-cli setup-db load-data audit-db profile-source sample-data
 
 install:
 	python3 -m pip install -e .[dev]
@@ -23,3 +23,6 @@ audit-db:
 
 profile-source:
 	python3 -m data_ingestion.profile_source
+
+sample-data:
+	python3 scripts/bootstrap_sample_data.py
