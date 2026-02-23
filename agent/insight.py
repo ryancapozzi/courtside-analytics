@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
+from typing import Any
 
 from .metrics import render_metric_context
 from .ollama_client import OllamaClient
@@ -15,6 +17,10 @@ class InsightGenerator:
     def summarize(self, question: str, result: QueryResult) -> str:
         if not result.rows:
             return "No rows matched the requested criteria. Try broadening filters or clarifying the question."
+
+        templated = self._deterministic_summary(result)
+        if templated is not None:
+            return templated
 
         sample_rows = result.rows[:10]
 
@@ -49,3 +55,63 @@ class InsightGenerator:
                 f"Top row summary: {first}. "
                 "Run with a local Ollama model for richer narrative output."
             )
+
+    def _deterministic_summary(self, result: QueryResult) -> str | None:
+        cols = set(result.columns)
+
+        conditional_cols = {
+            "team_name",
+            "player_name",
+            "games",
+            "wins",
+            "win_pct",
+            "avg_player_points",
+            "avg_team_points",
+        }
+        if conditional_cols.issubset(cols) and result.rows:
+            row = result.rows[0]
+            team = self._as_text(row.get("team_name"))
+            player = self._as_text(row.get("player_name"))
+            games = self._as_int(row.get("games"))
+            wins = self._as_int(row.get("wins"))
+            losses = max(games - wins, 0)
+            win_pct = self._as_float(row.get("win_pct"))
+            avg_player_points = self._as_float(row.get("avg_player_points"))
+            avg_team_points = self._as_float(row.get("avg_team_points"))
+
+            return (
+                f"When {player} scores more than the requested threshold for the {team}, "
+                f"the team is {wins}-{losses} across {games} games "
+                f"({win_pct:.2f}% win rate). "
+                f"In those games, {player} averages {avg_player_points:.2f} points and "
+                f"the {team} average {avg_team_points:.2f} points."
+            )
+
+        ranking_cols = {"player_name", "avg_points"}
+        if ranking_cols.issubset(cols) and result.rows:
+            top = result.rows[:3]
+            parts = []
+            for idx, row in enumerate(top, start=1):
+                name = self._as_text(row.get("player_name"))
+                points = self._as_float(row.get("avg_points"))
+                parts.append(f"{idx}) {name} ({points:.2f} ppg)")
+            return "Top scorers from this query: " + ", ".join(parts) + "."
+
+        return None
+
+    def _as_int(self, value: Any) -> int:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float, Decimal)):
+            return int(value)
+        return int(float(str(value)))
+
+    def _as_float(self, value: Any) -> float:
+        if isinstance(value, (int, float, Decimal)):
+            return float(value)
+        return float(str(value))
+
+    def _as_text(self, value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value)
