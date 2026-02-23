@@ -34,6 +34,17 @@ Agentic NBA analytics assistant that answers natural-language basketball questio
    - `cp .env.example .env`
 4. Ensure PostgreSQL is running and update `DATABASE_URL`.
 5. Ensure Ollama is running and the configured model is available.
+6. Place dataset CSVs in `data/raw/` (see `docs/source_setup.md`).
+
+## Data Setup Workflow
+1. Profile raw dataset coverage:
+   - `make profile-source`
+2. Apply schema:
+   - `make setup-db`
+3. Run ETL:
+   - `make load-data`
+4. Run data audit:
+   - `make audit-db`
 
 ## Current Status
 This repository is now scaffolded for the agreed Plan v4 and ready for iterative implementation and evaluation.

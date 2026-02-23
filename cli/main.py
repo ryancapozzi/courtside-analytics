@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import typer
@@ -9,6 +10,7 @@ from rich.table import Table
 
 from agent.config import load_agent_settings
 from agent.pipeline import AnalyticsAgent
+from database.audit_db import run_audit
 
 
 app = typer.Typer(help="Courtside Analytics CLI")
@@ -42,6 +44,33 @@ def ask(question: str) -> None:
             table.add_row(*(str(row.get(col, "")) for col in response.columns))
 
         console.print(table)
+
+
+@app.command("setup-db")
+def setup_db() -> None:
+    """Apply database schema."""
+    subprocess.run(["python3", "database/setup_db.py"], check=True)
+    console.print("[green]Database schema applied.[/green]")
+
+
+@app.command("load-data")
+def load_data() -> None:
+    """Run ETL against CSVs in data/raw."""
+    subprocess.run(["python3", "-m", "data_ingestion.run_etl"], check=True)
+    console.print("[green]ETL run completed.[/green]")
+
+
+@app.command("audit-db")
+def audit_db() -> None:
+    """Audit loaded data quality and coverage."""
+    settings = load_agent_settings()
+    report = run_audit(settings.database_url)
+    console.print_json(data={
+        "table_counts": report.table_counts.__dict__,
+        "coverage": report.coverage.__dict__,
+        "orphan_player_game_stats": report.orphan_player_game_stats,
+        "games_missing_scores": report.games_missing_scores,
+    })
 
 
 @app.command()
