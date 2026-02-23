@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "courtside-analytics"
+version = "0.1.0"
+description = "Agentic NBA analytics assistant with a hybrid NL-to-SQL pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7.0",
+  "python-dotenv>=1.0.1",
+  "psycopg[binary]>=3.1.18",
+  "sqlglot>=25.2.0",
+  "rapidfuzz>=3.9.0",
+  "typer>=0.12.3",
+  "rich>=13.7.1",
+  "pandas>=2.2.2",
+  "requests>=2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "ruff>=0.5.0",
+]
+
+[project.scripts]
+courtside = "cli.main:app"
+
+[tool.setuptools]
+packages = ["agent", "analytics", "cli", "data_ingestion"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

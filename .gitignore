@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Tooling
+.coverage
+htmlcov/
+*.log
+
+# Environment
+.env
+
+# Data artifacts
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Benchmark outputs
+data/benchmarks/results/*
+!data/benchmarks/results/.gitkeep
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
