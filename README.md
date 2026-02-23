@@ -17,6 +17,9 @@ Agentic NBA analytics assistant that answers natural-language basketball questio
 5. SQL guardrails + execution
 6. Insight generation from computed results
 
+Default behavior:
+- Queries use `regular` season games unless the prompt explicitly asks for `playoffs`, `preseason`, or `all games`.
+
 ## Repo Structure
 - `data_ingestion/`: ingestion and ETL scripts
 - `database/`: schema and database setup
@@ -55,6 +58,14 @@ Agentic NBA analytics assistant that answers natural-language basketball questio
    - `make audit-db`
 3. Ask a question:
    - `courtside ask "How did the Atlanta Hawks perform when Trae Young scored more than 25 points?"`
+
+## Benchmark Evaluation
+- Run:
+  - `courtside evaluate --benchmark-path data/benchmarks/questions.json --output-path data/benchmarks/results/latest.json`
+- Outputs:
+  - `data/benchmarks/results/latest.json`
+  - `data/benchmarks/results/latest_summary.json`
+  - `data/benchmarks/results/latest_report.md`
 
 ## Current Status
 This repository is now scaffolded for the agreed Plan v4 and ready for iterative implementation and evaluation.

@@ -103,6 +103,8 @@ class AnalyticsAgent:
             "players": [player.name for player in resolved.players],
             "seasons": resolved.seasons,
             "thresholds": resolved.thresholds,
+            "game_scope": resolved.game_scope,
+            "ranking_metric": resolved.ranking_metric,
             "notes": plan.notes,
             "ambiguities": resolved.ambiguities,
             "row_count": len(result.rows),

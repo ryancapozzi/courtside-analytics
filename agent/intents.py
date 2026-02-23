@@ -50,3 +50,30 @@ def extract_thresholds(question: str) -> dict[str, float]:
 
 def extract_season_mentions(question: str) -> list[str]:
     return [m.group(1) for m in SEASON_RE.finditer(question)]
+
+
+def extract_game_scope(question: str) -> str:
+    text = question.lower()
+    if "all games" in text or "all-time" in text or "overall" in text:
+        return "all"
+    if "playoff" in text or "postseason" in text:
+        return "playoffs"
+    if "preseason" in text:
+        return "preseason"
+    if "regular season" in text:
+        return "regular"
+    # Default to regular season to avoid mixing in special events.
+    return "regular"
+
+
+def extract_ranking_metric(question: str) -> str:
+    text = question.lower()
+    if "assist" in text:
+        return "assists"
+    if "rebound" in text:
+        return "rebounds"
+    if "steal" in text:
+        return "steals"
+    if "block" in text:
+        return "blocks"
+    return "points"

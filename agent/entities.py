@@ -5,7 +5,12 @@ from dataclasses import dataclass
 import psycopg
 from rapidfuzz import fuzz, process
 
-from .intents import extract_season_mentions, extract_thresholds
+from .intents import (
+    extract_game_scope,
+    extract_ranking_metric,
+    extract_season_mentions,
+    extract_thresholds,
+)
 from .types import ResolvedContext, ResolvedEntity
 
 
@@ -27,6 +32,8 @@ class EntityResolver:
         context.players = self._resolve_players(question, catalog)
         context.seasons = extract_season_mentions(question)
         context.thresholds = extract_thresholds(question)
+        context.game_scope = extract_game_scope(question)
+        context.ranking_metric = extract_ranking_metric(question)
 
         if not context.teams:
             context.ambiguities.append("No team detected in question.")

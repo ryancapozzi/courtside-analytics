@@ -26,11 +26,10 @@ class TemplateSQLBuilder:
         team = context.teams[0]
         player = context.players[0]
 
-        points_threshold = context.thresholds.get("points_more_than")
-        if points_threshold is None:
-            points_threshold = context.thresholds.get("points_over", 25)
+        threshold_stat, threshold_operator, threshold_value = self._extract_threshold_filter(context)
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
 
-        sql = """
+        sql = f"""
         SELECT
           t.team_name,
           p.player_name,
@@ -46,15 +45,19 @@ class TemplateSQLBuilder:
         JOIN players p ON p.player_id = pgs.player_id
         WHERE pgs.player_id = %s
           AND pgs.team_id = %s
-          AND pgs.points > %s
+          {game_scope_clause}
+          AND pgs.{threshold_stat} {threshold_operator} %s
         GROUP BY t.team_name, p.player_name;
         """
 
         return SQLPlan(
             sql=sql,
-            params=(player.id, team.id, points_threshold),
+            params=(player.id, team.id, threshold_value),
             source="template",
-            notes=[f"Using threshold points > {points_threshold}"],
+            notes=[
+                f"Using threshold {threshold_stat} {threshold_operator} {threshold_value}",
+                game_scope_note,
+            ],
         )
 
     def _build_team_comparison(self, context: ResolvedContext) -> SQLPlan | None:
@@ -63,8 +66,9 @@ class TemplateSQLBuilder:
 
         team_a = context.teams[0]
         team_b = context.teams[1]
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
 
-        sql = """
+        sql = f"""
         SELECT
           s.season_label,
           t.team_name,
@@ -77,6 +81,7 @@ class TemplateSQLBuilder:
         JOIN seasons s ON s.season_id = g.season_id
         JOIN teams t ON t.team_id = tgr.team_id
         WHERE tgr.team_id IN (%s, %s)
+          {game_scope_clause}
         GROUP BY s.start_year, s.season_label, t.team_name
         ORDER BY s.start_year, t.team_name;
         """
@@ -85,7 +90,7 @@ class TemplateSQLBuilder:
             sql=sql,
             params=(team_a.id, team_b.id),
             source="template",
-            notes=[f"Comparing {team_a.name} vs {team_b.name}"],
+            notes=[f"Comparing {team_a.name} vs {team_b.name}", game_scope_note],
         )
 
     def _build_team_trend(self, context: ResolvedContext) -> SQLPlan | None:
@@ -93,8 +98,9 @@ class TemplateSQLBuilder:
             return None
 
         team = context.teams[0]
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
 
-        sql = """
+        sql = f"""
         SELECT
           s.season_label,
           COUNT(*) AS games,
@@ -106,6 +112,7 @@ class TemplateSQLBuilder:
         JOIN games g ON g.game_id = tgr.game_id
         JOIN seasons s ON s.season_id = g.season_id
         WHERE tgr.team_id = %s
+          {game_scope_clause}
         GROUP BY s.start_year, s.season_label
         ORDER BY s.start_year;
         """
@@ -114,12 +121,22 @@ class TemplateSQLBuilder:
             sql=sql,
             params=(team.id,),
             source="template",
-            notes=[f"Trend for {team.name}"],
+            notes=[f"Trend for {team.name}", game_scope_note],
         )
 
     def _build_player_ranking(self, context: ResolvedContext) -> SQLPlan:
         season_filter = ""
         params: list[object] = []
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+
+        metric_map = {
+            "points": ("avg_points", "AVG(pgs.points)"),
+            "assists": ("avg_assists", "AVG(pgs.assists)"),
+            "rebounds": ("avg_rebounds", "AVG(pgs.rebounds)"),
+            "steals": ("avg_steals", "AVG(pgs.steals)"),
+            "blocks": ("avg_blocks", "AVG(pgs.blocks)"),
+        }
+        order_alias, order_expr = metric_map.get(context.ranking_metric, metric_map["points"])
 
         if context.seasons:
             season_filter = "AND s.season_label = %s"
@@ -131,16 +148,18 @@ class TemplateSQLBuilder:
           COUNT(*) AS games,
           ROUND(AVG(pgs.points)::numeric, 2) AS avg_points,
           ROUND(AVG(pgs.assists)::numeric, 2) AS avg_assists,
-          ROUND(AVG(pgs.rebounds)::numeric, 2) AS avg_rebounds
+          ROUND(AVG(pgs.rebounds)::numeric, 2) AS avg_rebounds,
+          ROUND(({order_expr})::numeric, 2) AS metric_value
         FROM player_game_stats pgs
         JOIN players p ON p.player_id = pgs.player_id
         JOIN games g ON g.game_id = pgs.game_id
         JOIN seasons s ON s.season_id = g.season_id
         WHERE pgs.minutes IS NOT NULL
+          {game_scope_clause}
           {season_filter}
         GROUP BY p.player_name
         HAVING COUNT(*) >= 20
-        ORDER BY avg_points DESC
+        ORDER BY {order_alias} DESC
         LIMIT 15;
         """
 
@@ -148,5 +167,36 @@ class TemplateSQLBuilder:
             sql=sql,
             params=tuple(params),
             source="template",
-            notes=["Ranking query uses minimum 20 games played."],
+            notes=[
+                "Ranking query uses minimum 20 games played.",
+                f"Ranking metric: {context.ranking_metric}",
+                game_scope_note,
+            ],
         )
+
+    def _extract_threshold_filter(self, context: ResolvedContext) -> tuple[str, str, float]:
+        comparator_map = {
+            "more_than": ">",
+            "over": ">",
+            "above": ">",
+            "greater_than": ">",
+            "at_least": ">=",
+            "less_than": "<",
+            "under": "<",
+        }
+        metric_priority = ["points", "rebounds", "assists"]
+        for stat in metric_priority:
+            for suffix, op in comparator_map.items():
+                key = f"{stat}_{suffix}"
+                if key in context.thresholds:
+                    return stat, op, context.thresholds[key]
+        return "points", ">", 25.0
+
+    def _scope_clause(self, game_scope: str) -> tuple[str, str]:
+        if game_scope == "all":
+            return "AND 1=1", "Game scope: all games."
+        if game_scope == "playoffs":
+            return "AND g.game_type = 'playoffs'", "Game scope: playoffs."
+        if game_scope == "preseason":
+            return "AND g.game_type = 'preseason'", "Game scope: preseason."
+        return "AND g.game_type = 'regular'", "Game scope: regular season (default)."

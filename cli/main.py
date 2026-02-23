@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from analytics.evaluation import evaluate_results, render_markdown_report
 from agent.config import load_agent_settings
 from agent.pipeline import AnalyticsAgent
 
@@ -98,7 +99,27 @@ def evaluate(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
+    summary, findings = evaluate_results(questions, results)
+    summary_payload = {
+        "total_questions": summary.total_questions,
+        "sql_generated": summary.sql_generated,
+        "non_empty_results": summary.non_empty_results,
+        "intent_matches": summary.intent_matches,
+        "template_ratio": summary.template_ratio,
+        "findings_count": len(findings),
+    }
+
+    summary_path = output.with_name(f"{output.stem}_summary.json")
+    summary_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
+
+    report_path = output.with_name(f"{output.stem}_report.md")
+    report_path.write_text(render_markdown_report(summary, findings), encoding="utf-8")
+
+    console.print("\nBenchmark summary:")
+    console.print_json(data=summary_payload)
     console.print(f"\nSaved benchmark results to: {output}")
+    console.print(f"Saved benchmark summary to: {summary_path}")
+    console.print(f"Saved benchmark report to: {report_path}")
 
 
 if __name__ == "__main__":

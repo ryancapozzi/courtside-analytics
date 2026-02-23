@@ -26,6 +26,8 @@ class ResolvedContext:
     players: list[ResolvedEntity] = field(default_factory=list)
     seasons: list[str] = field(default_factory=list)
     thresholds: dict[str, float] = field(default_factory=dict)
+    game_scope: str = "regular"
+    ranking_metric: str = "points"
     ambiguities: list[str] = field(default_factory=list)
 
 

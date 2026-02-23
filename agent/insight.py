@@ -93,9 +93,38 @@ class InsightGenerator:
             parts = []
             for idx, row in enumerate(top, start=1):
                 name = self._as_text(row.get("player_name"))
-                points = self._as_float(row.get("avg_points"))
-                parts.append(f"{idx}) {name} ({points:.2f} ppg)")
-            return "Top scorers from this query: " + ", ".join(parts) + "."
+                metric_value = self._as_float(row.get("metric_value", row.get("avg_points")))
+                parts.append(f"{idx}) {name} ({metric_value:.2f})")
+            return "Top players from this query: " + ", ".join(parts) + "."
+
+        comparison_cols = {"season_label", "team_name", "games", "wins", "win_pct"}
+        if comparison_cols.issubset(cols) and result.rows:
+            latest = self._latest_season_rows(result.rows)
+            parts = []
+            for row in latest:
+                team = self._as_text(row.get("team_name"))
+                wins = self._as_int(row.get("wins"))
+                games = self._as_int(row.get("games"))
+                win_pct = self._as_float(row.get("win_pct"))
+                parts.append(f"{team}: {wins}-{max(games - wins, 0)} ({win_pct:.2f}%)")
+            season = self._as_text(latest[0].get("season_label"))
+            return f"In the latest season in this result set ({season}), " + "; ".join(parts) + "."
+
+        trend_cols = {"season_label", "games", "wins", "win_pct", "avg_points"}
+        if trend_cols.issubset(cols) and result.rows:
+            first = result.rows[0]
+            last = result.rows[-1]
+            first_season = self._as_text(first.get("season_label"))
+            last_season = self._as_text(last.get("season_label"))
+            first_win = self._as_float(first.get("win_pct"))
+            last_win = self._as_float(last.get("win_pct"))
+            delta = last_win - first_win
+            direction = "up" if delta >= 0 else "down"
+            return (
+                f"Across {first_season} to {last_season}, win rate moved {direction} by "
+                f"{abs(delta):.2f} percentage points "
+                f"({first_win:.2f}% to {last_win:.2f}%)."
+            )
 
         return None
 
@@ -115,3 +144,10 @@ class InsightGenerator:
         if value is None:
             return ""
         return str(value)
+
+    def _latest_season_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not rows:
+            return []
+        latest = rows[-1].get("season_label")
+        latest_rows = [row for row in rows if row.get("season_label") == latest]
+        return latest_rows if latest_rows else rows[-2:]
