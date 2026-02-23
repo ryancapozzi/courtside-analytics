@@ -1,6 +1,9 @@
 # Data Contract (CSV Inputs)
 
-Place files in `data/raw/` with these canonical columns (aliases supported by loader):
+Place files in `data/raw/` with these canonical columns (aliases supported by loader).
+Accepted source filenames include:
+- games: `games.csv` or `Games.csv`
+- player stats: `player_game_stats.csv`, `PlayerStatistics.csv`, or `PlayerGameStats.csv`
 
 ## teams.csv
 - `team_id` (required)
@@ -41,3 +44,4 @@ Place files in `data/raw/` with these canonical columns (aliases supported by lo
 Notes:
 - If `teams.csv` is missing, teams are derived from game rows.
 - If `players.csv` is missing, players are derived from stat rows.
+- If `season_label` is missing in games data, it is derived from `game_date`.

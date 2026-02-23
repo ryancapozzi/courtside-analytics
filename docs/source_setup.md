@@ -7,8 +7,8 @@
    - player game stats (one row per player per game)
    - optional teams and players reference tables
 2. Export CSVs into `data/raw/` with names:
-   - `games.csv`
-   - `player_game_stats.csv`
+   - `games.csv` or `Games.csv`
+   - `player_game_stats.csv` or `PlayerStatistics.csv`
    - optional: `teams.csv`, `players.csv`
 
 ## Validate source coverage

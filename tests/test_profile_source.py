@@ -14,3 +14,5 @@ def test_profile_source_from_sample_fixture() -> None:
     assert profile.distinct_seasons == ["2023-24"]
     assert profile.first_game_date == "2023-10-25"
     assert profile.last_game_date == "2023-11-15"
+    assert profile.games_file == "games.csv"
+    assert profile.player_game_stats_file == "player_game_stats.csv"
