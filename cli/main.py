@@ -10,7 +10,6 @@ from rich.table import Table
 
 from agent.config import load_agent_settings
 from agent.pipeline import AnalyticsAgent
-from database.audit_db import run_audit
 
 
 app = typer.Typer(help="Courtside Analytics CLI")
@@ -63,14 +62,7 @@ def load_data() -> None:
 @app.command("audit-db")
 def audit_db() -> None:
     """Audit loaded data quality and coverage."""
-    settings = load_agent_settings()
-    report = run_audit(settings.database_url)
-    console.print_json(data={
-        "table_counts": report.table_counts.__dict__,
-        "coverage": report.coverage.__dict__,
-        "orphan_player_game_stats": report.orphan_player_game_stats,
-        "games_missing_scores": report.games_missing_scores,
-    })
+    subprocess.run(["python3", "database/audit_db.py"], check=True)
 
 
 @app.command()
