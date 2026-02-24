@@ -39,3 +39,33 @@ def test_deterministic_conditional_summary_uses_exact_values() -> None:
     assert "54.37%" in text
     assert "33.23" in text
     assert "119.74" in text
+
+
+def test_deterministic_threshold_count_summary() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "player_name",
+            "threshold_stat",
+            "threshold_operator",
+            "threshold_value",
+            "games_meeting_threshold",
+            "avg_stat_value",
+        ],
+        rows=[
+            {
+                "player_name": "John Wall",
+                "threshold_stat": "points",
+                "threshold_operator": ">=",
+                "threshold_value": 25,
+                "games_meeting_threshold": 145,
+                "avg_stat_value": 31.2,
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "John Wall has 145 games" in text
+    assert "(points >= 25)" in text
+    assert "31.20 points" in text

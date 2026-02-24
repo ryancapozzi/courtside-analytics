@@ -10,7 +10,7 @@ from .schema_context import fetch_schema_context
 from .sql_fallback import SQLFallbackGenerator
 from .sql_validator import SQLGuardrails, SQLValidationError
 from .templates import TemplateSQLBuilder
-from .types import AgentResponse, IntentType, SQLPlan
+from .types import AgentResponse, SQLPlan
 
 
 ALLOWED_TABLES = {
@@ -44,28 +44,20 @@ class AnalyticsAgent:
         intent = classify_intent(question)
         resolved = self.resolver.resolve(question)
 
-        if resolved.ambiguities and intent == IntentType.UNKNOWN:
-            clarification = " ".join(resolved.ambiguities)
-            return AgentResponse(
-                answer=f"Need clarification before running SQL: {clarification}",
-                intent=intent,
-                sql="",
-                sql_source="none",
-                columns=[],
-                rows=[],
-                provenance={
-                    "ambiguities": resolved.ambiguities,
-                    "intent": intent.value,
-                },
-            )
-
         plan = self.templates.build(intent, resolved)
 
         if plan is None:
             plan = self._fallback_plan(question, resolved)
             if plan is None:
+                clarification = ""
+                if resolved.ambiguities:
+                    clarification = f" Clarifications needed: {' '.join(resolved.ambiguities)}"
                 return AgentResponse(
-                    answer="Could not map the question to a safe query. Please rephrase with a team/player and metric.",
+                    answer=(
+                        "Could not map the question to a safe query."
+                        " Please rephrase with a clear player/team and metric."
+                        f"{clarification}"
+                    ),
                     intent=intent,
                     sql="",
                     sql_source="none",

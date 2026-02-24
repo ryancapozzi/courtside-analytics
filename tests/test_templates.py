@@ -28,3 +28,19 @@ def test_ranking_template_uses_metric() -> None:
 
     assert plan is not None
     assert "ORDER BY avg_assists DESC" in plan.sql
+
+
+def test_player_threshold_count_template() -> None:
+    builder = TemplateSQLBuilder()
+    context = ResolvedContext(
+        players=[ResolvedEntity(id="201566", name="Russell Westbrook")],
+        game_scope="regular",
+        thresholds={"points_at_least": 25.0},
+    )
+
+    plan = builder.build(IntentType.PLAYER_THRESHOLD_COUNT, context)
+
+    assert plan is not None
+    assert "games_meeting_threshold" in plan.sql
+    assert "pgs.points >=" in plan.sql
+    assert plan.params[-1] == 25.0

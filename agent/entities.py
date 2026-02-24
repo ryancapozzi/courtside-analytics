@@ -35,10 +35,15 @@ class EntityResolver:
         context.game_scope = extract_game_scope(question)
         context.ranking_metric = extract_ranking_metric(question)
 
-        if not context.teams:
-            context.ambiguities.append("No team detected in question.")
-        if "when" in question.lower() and not context.players:
+        lower_q = question.lower()
+        if "when" in lower_q and context.thresholds and not context.players:
             context.ambiguities.append("No player detected for conditional query.")
+        if (
+            any(token in lower_q for token in ["how many times", "how many games", "how often", "count"])
+            and context.thresholds
+            and not context.players
+        ):
+            context.ambiguities.append("No player detected in threshold count query.")
 
         return context
 

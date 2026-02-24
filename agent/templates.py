@@ -8,6 +8,9 @@ class TemplateSQLBuilder:
         if intent == IntentType.CONDITIONAL_TEAM_PERFORMANCE:
             return self._build_conditional_team_performance(context)
 
+        if intent == IntentType.PLAYER_THRESHOLD_COUNT:
+            return self._build_player_threshold_count(context)
+
         if intent == IntentType.TEAM_COMPARISON:
             return self._build_team_comparison(context)
 
@@ -57,6 +60,66 @@ class TemplateSQLBuilder:
             notes=[
                 f"Using threshold {threshold_stat} {threshold_operator} {threshold_value}",
                 game_scope_note,
+            ],
+        )
+
+    def _build_player_threshold_count(self, context: ResolvedContext) -> SQLPlan | None:
+        if not context.players:
+            return None
+
+        player = context.players[0]
+        threshold_stat, threshold_operator, threshold_value = self._extract_threshold_filter(context)
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+
+        team_clause = ""
+        team_note = "Team scope: all teams."
+        params: list[object] = [threshold_value, player.id]
+
+        if context.teams:
+            team = context.teams[0]
+            team_clause = "AND pgs.team_id = %s"
+            params.append(team.id)
+            team_note = f"Team scope: {team.name}."
+
+        season_clause = ""
+        season_note = "Season scope: all available seasons."
+        if context.seasons:
+            season_clause = "AND s.season_label = %s"
+            params.append(context.seasons[0])
+            season_note = f"Season scope: {context.seasons[0]}."
+
+        params.append(threshold_value)
+
+        sql = f"""
+        SELECT
+          p.player_name,
+          '{threshold_stat}' AS threshold_stat,
+          '{threshold_operator}' AS threshold_operator,
+          %s::numeric AS threshold_value,
+          COUNT(*) AS games_meeting_threshold,
+          ROUND(AVG(pgs.{threshold_stat})::numeric, 2) AS avg_stat_value
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        JOIN seasons s ON s.season_id = g.season_id
+        WHERE pgs.player_id = %s
+          {team_clause}
+          {game_scope_clause}
+          {season_clause}
+          AND pgs.{threshold_stat} {threshold_operator} %s
+        GROUP BY p.player_name;
+        """
+
+        return SQLPlan(
+            sql=sql,
+            params=tuple(params),
+            source="template",
+            notes=[
+                f"Threshold count for {player.name}.",
+                f"Using threshold {threshold_stat} {threshold_operator} {threshold_value}",
+                game_scope_note,
+                team_note,
+                season_note,
             ],
         )
 
@@ -183,8 +246,9 @@ class TemplateSQLBuilder:
             "at_least": ">=",
             "less_than": "<",
             "under": "<",
+            "exactly": "=",
         }
-        metric_priority = ["points", "rebounds", "assists"]
+        metric_priority = ["points", "rebounds", "assists", "steals", "blocks"]
         for stat in metric_priority:
             for suffix, op in comparator_map.items():
                 key = f"{stat}_{suffix}"

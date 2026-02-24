@@ -17,10 +17,21 @@ def test_classify_team_comparison() -> None:
     assert classify_intent(question) == IntentType.TEAM_COMPARISON
 
 
+def test_classify_player_threshold_count_intent() -> None:
+    question = "How many times has John Wall scored 25 points?"
+    assert classify_intent(question) == IntentType.PLAYER_THRESHOLD_COUNT
+
+
 def test_extract_thresholds() -> None:
     question = "How did the Hawks perform when Trae Young scored over 30 points?"
     thresholds = extract_thresholds(question)
     assert thresholds["points_over"] == 30
+
+
+def test_extract_thresholds_from_implicit_scoring_phrase() -> None:
+    question = "How many times has John Wall scored 25 points?"
+    thresholds = extract_thresholds(question)
+    assert thresholds["points_at_least"] == 25
 
 
 def test_extract_game_scope_defaults_regular() -> None:

@@ -87,6 +87,34 @@ class InsightGenerator:
                 f"the {team} average {avg_team_points:.2f} points."
             )
 
+        threshold_count_cols = {
+            "player_name",
+            "threshold_stat",
+            "threshold_operator",
+            "threshold_value",
+            "games_meeting_threshold",
+        }
+        if threshold_count_cols.issubset(cols) and result.rows:
+            row = result.rows[0]
+            player = self._as_text(row.get("player_name"))
+            stat = self._as_text(row.get("threshold_stat"))
+            operator = self._as_text(row.get("threshold_operator"))
+            threshold_value = self._as_float(row.get("threshold_value"))
+            games = self._as_int(row.get("games_meeting_threshold"))
+            avg_stat_value = row.get("avg_stat_value")
+            threshold_display = f"{threshold_value:g}"
+
+            summary = (
+                f"{player} has {games} games meeting the condition "
+                f"({stat} {operator} {threshold_display})."
+            )
+            if avg_stat_value is not None:
+                summary += (
+                    f" In those games, {player} averaged "
+                    f"{self._as_float(avg_stat_value):.2f} {stat}."
+                )
+            return summary
+
         ranking_cols = {"player_name", "avg_points"}
         if ranking_cols.issubset(cols) and result.rows:
             top = result.rows[:3]

@@ -7,6 +7,7 @@ from typing import Any
 
 class IntentType(str, Enum):
     CONDITIONAL_TEAM_PERFORMANCE = "conditional_team_performance"
+    PLAYER_THRESHOLD_COUNT = "player_threshold_count"
     TEAM_COMPARISON = "team_comparison"
     TEAM_TREND = "team_trend"
     PLAYER_RANKING = "player_ranking"
