@@ -69,3 +69,156 @@ def test_deterministic_threshold_count_summary() -> None:
     assert "John Wall has 145 games" in text
     assert "(points >= 25)" in text
     assert "31.20 points" in text
+
+
+def test_deterministic_player_profile_summary() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "player_name",
+            "primary_metric",
+            "games",
+            "avg_points",
+            "avg_assists",
+            "avg_rebounds",
+            "primary_metric_avg",
+        ],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "primary_metric": "assists",
+                "games": 82,
+                "avg_points": 27.1,
+                "avg_assists": 8.4,
+                "avg_rebounds": 7.8,
+                "primary_metric_avg": 8.4,
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "LeBron James is averaging 27.10 points" in text
+    assert "82 games" in text
+    assert "Primary focus metric (assists) is 8.40." in text
+
+
+def test_deterministic_team_record_summary() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "team_name",
+            "games",
+            "wins",
+            "losses",
+            "win_pct",
+            "avg_points",
+            "avg_points_allowed",
+        ],
+        rows=[
+            {
+                "team_name": "Lakers",
+                "games": 82,
+                "wins": 47,
+                "losses": 35,
+                "win_pct": 57.32,
+                "avg_points": 116.2,
+                "avg_points_allowed": 112.1,
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "Lakers are 47-35" in text
+    assert "57.32%" in text
+    assert "116.20 points scored" in text
+
+
+def test_deterministic_team_head_to_head_summary() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=["team_a", "team_b", "games", "team_a_wins", "team_b_wins", "team_a_win_pct"],
+        rows=[
+            {
+                "team_a": "Lakers",
+                "team_b": "Celtics",
+                "games": 20,
+                "team_a_wins": 12,
+                "team_b_wins": 8,
+                "team_a_win_pct": 60.0,
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "Lakers vs Celtics has produced 20 games" in text
+    assert "12-8" in text
+    assert "60.00%" in text
+
+
+def test_deterministic_single_game_high_summary() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "player_name",
+            "metric_name",
+            "metric_value",
+            "game_date",
+            "season_label",
+            "opponent_team",
+        ],
+        rows=[
+            {
+                "player_name": "Stephen Curry",
+                "metric_name": "points",
+                "metric_value": 62,
+                "game_date": "2021-01-03",
+                "season_label": "2020-21",
+                "opponent_team": "Portland Trail Blazers",
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "top single-game points output" in text
+    assert "62" in text
+    assert "2021-01-03" in text
+
+
+def test_player_ranking_summary_not_misread_as_profile() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "player_name",
+            "games",
+            "avg_points",
+            "avg_assists",
+            "avg_rebounds",
+            "metric_value",
+        ],
+        rows=[
+            {
+                "player_name": "Nikola Jokic",
+                "games": 42,
+                "avg_points": 28.76,
+                "avg_assists": 10.52,
+                "avg_rebounds": 12.52,
+                "metric_value": 10.52,
+            },
+            {
+                "player_name": "Cade Cunningham",
+                "games": 49,
+                "avg_points": 25.53,
+                "avg_assists": 9.76,
+                "avg_rebounds": 5.76,
+                "metric_value": 9.76,
+            },
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert text.startswith("Top players from this query:")

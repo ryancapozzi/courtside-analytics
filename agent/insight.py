@@ -115,6 +115,84 @@ class InsightGenerator:
                 )
             return summary
 
+        player_profile_cols = {
+            "player_name",
+            "primary_metric",
+            "games",
+            "avg_points",
+            "avg_assists",
+            "avg_rebounds",
+            "primary_metric_avg",
+        }
+        if player_profile_cols.issubset(cols) and result.rows:
+            row = result.rows[0]
+            player = self._as_text(row.get("player_name"))
+            games = self._as_int(row.get("games"))
+            avg_points = self._as_float(row.get("avg_points"))
+            avg_assists = self._as_float(row.get("avg_assists"))
+            avg_rebounds = self._as_float(row.get("avg_rebounds"))
+            metric = self._as_text(row.get("primary_metric")) or "points"
+            metric_avg = self._as_float(row.get("primary_metric_avg", avg_points))
+            return (
+                f"{player} is averaging {avg_points:.2f} points, {avg_assists:.2f} assists, and "
+                f"{avg_rebounds:.2f} rebounds across {games} games. "
+                f"Primary focus metric ({metric}) is {metric_avg:.2f}."
+            )
+
+        single_game_high_cols = {"player_name", "metric_name", "metric_value", "game_date"}
+        if single_game_high_cols.issubset(cols) and result.rows:
+            row = result.rows[0]
+            player = self._as_text(row.get("player_name"))
+            metric = self._as_text(row.get("metric_name")) or "points"
+            value = self._as_float(row.get("metric_value"))
+            game_date = self._as_text(row.get("game_date"))
+            season = self._as_text(row.get("season_label"))
+            opponent = self._as_text(row.get("opponent_team"))
+            return (
+                f"{player}'s top single-game {metric} output in this scope is {value:.0f}, "
+                f"recorded on {game_date} in {season} against {opponent}."
+            )
+
+        team_record_cols = {"team_name", "games", "wins", "losses", "win_pct"}
+        if team_record_cols.issubset(cols) and result.rows:
+            row = result.rows[0]
+            team = self._as_text(row.get("team_name"))
+            games = self._as_int(row.get("games"))
+            wins = self._as_int(row.get("wins"))
+            losses = self._as_int(row.get("losses"))
+            win_pct = self._as_float(row.get("win_pct"))
+            avg_points = self._as_float(row.get("avg_points", 0.0))
+            avg_points_allowed = self._as_float(row.get("avg_points_allowed", 0.0))
+            return (
+                f"{team} are {wins}-{losses} across {games} games ({win_pct:.2f}% win rate), "
+                f"averaging {avg_points:.2f} points scored and {avg_points_allowed:.2f} allowed."
+            )
+
+        team_h2h_cols = {"team_a", "team_b", "games", "team_a_wins", "team_b_wins", "team_a_win_pct"}
+        if team_h2h_cols.issubset(cols) and result.rows:
+            row = result.rows[0]
+            team_a = self._as_text(row.get("team_a"))
+            team_b = self._as_text(row.get("team_b"))
+            games = self._as_int(row.get("games"))
+            team_a_wins = self._as_int(row.get("team_a_wins"))
+            team_b_wins = self._as_int(row.get("team_b_wins"))
+            team_a_win_pct = self._as_float(row.get("team_a_win_pct"))
+            return (
+                f"In this scope, {team_a} vs {team_b} has produced {games} games. "
+                f"{team_a} lead {team_a_wins}-{team_b_wins} "
+                f"({team_a_win_pct:.2f}% win rate for {team_a})."
+            )
+
+        team_ranking_cols = {"team_name", "metric_value"}
+        if team_ranking_cols.issubset(cols) and result.rows:
+            top = result.rows[:3]
+            parts = []
+            for idx, row in enumerate(top, start=1):
+                name = self._as_text(row.get("team_name"))
+                metric_value = self._as_float(row.get("metric_value"))
+                parts.append(f"{idx}) {name} ({metric_value:.2f})")
+            return "Top teams from this query: " + ", ".join(parts) + "."
+
         ranking_cols = {"player_name", "avg_points"}
         if ranking_cols.issubset(cols) and result.rows:
             top = result.rows[:3]

@@ -37,6 +37,10 @@ class SQLFallbackGenerator:
                 f"Resolved players: {[player.name for player in context.players]}",
                 f"Resolved seasons: {context.seasons}",
                 f"Thresholds: {context.thresholds}",
+                f"Primary metric: {context.primary_metric}",
+                f"Ranking metric: {context.ranking_metric}",
+                f"Ranking limit: {context.ranking_limit}",
+                f"Against mode: {context.against_mode}",
                 "Allowed tables: teams, players, seasons, games, player_game_stats, team_game_results.",
                 "Return SQL only.",
             ]

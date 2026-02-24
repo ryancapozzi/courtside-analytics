@@ -11,11 +11,26 @@ class TemplateSQLBuilder:
         if intent == IntentType.PLAYER_THRESHOLD_COUNT:
             return self._build_player_threshold_count(context)
 
+        if intent == IntentType.PLAYER_PROFILE_SUMMARY:
+            return self._build_player_profile_summary(context)
+
+        if intent == IntentType.PLAYER_SINGLE_GAME_HIGH:
+            return self._build_player_single_game_high(context)
+
         if intent == IntentType.TEAM_COMPARISON:
             return self._build_team_comparison(context)
 
         if intent == IntentType.TEAM_TREND:
             return self._build_team_trend(context)
+
+        if intent == IntentType.TEAM_RECORD_SUMMARY:
+            return self._build_team_record_summary(context)
+
+        if intent == IntentType.TEAM_HEAD_TO_HEAD:
+            return self._build_team_head_to_head(context)
+
+        if intent == IntentType.TEAM_RANKING:
+            return self._build_team_ranking(context)
 
         if intent == IntentType.PLAYER_RANKING:
             return self._build_player_ranking(context)
@@ -31,6 +46,7 @@ class TemplateSQLBuilder:
 
         threshold_stat, threshold_operator, threshold_value = self._extract_threshold_filter(context)
         game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
 
         sql = f"""
         SELECT
@@ -43,23 +59,26 @@ class TemplateSQLBuilder:
           ROUND(AVG(tgr.team_points)::numeric, 2) AS avg_team_points
         FROM player_game_stats pgs
         JOIN games g ON g.game_id = pgs.game_id
+        JOIN seasons s ON s.season_id = g.season_id
         JOIN team_game_results tgr ON tgr.game_id = g.game_id AND tgr.team_id = pgs.team_id
         JOIN teams t ON t.team_id = pgs.team_id
         JOIN players p ON p.player_id = pgs.player_id
         WHERE pgs.player_id = %s
           AND pgs.team_id = %s
           {game_scope_clause}
+          {season_clause}
           AND pgs.{threshold_stat} {threshold_operator} %s
         GROUP BY t.team_name, p.player_name;
         """
 
         return SQLPlan(
             sql=sql,
-            params=(player.id, team.id, threshold_value),
+            params=(player.id, team.id, *season_params, threshold_value),
             source="template",
             notes=[
                 f"Using threshold {threshold_stat} {threshold_operator} {threshold_value}",
                 game_scope_note,
+                season_note,
             ],
         )
 
@@ -81,12 +100,8 @@ class TemplateSQLBuilder:
             params.append(team.id)
             team_note = f"Team scope: {team.name}."
 
-        season_clause = ""
-        season_note = "Season scope: all available seasons."
-        if context.seasons:
-            season_clause = "AND s.season_label = %s"
-            params.append(context.seasons[0])
-            season_note = f"Season scope: {context.seasons[0]}."
+        season_clause, season_params, season_note = self._season_clause(context)
+        params.extend(season_params)
 
         params.append(threshold_value)
 
@@ -123,6 +138,144 @@ class TemplateSQLBuilder:
             ],
         )
 
+    def _build_player_profile_summary(self, context: ResolvedContext) -> SQLPlan | None:
+        if not context.players:
+            return None
+
+        player = context.players[0]
+        metric = self._safe_player_metric(context.primary_metric)
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
+
+        team_clause = ""
+        team_note = "Team scope: all teams."
+        params: list[object] = [metric, player.id]
+
+        if context.teams and context.against_mode:
+            opponent = context.teams[0]
+            team_clause = """
+            AND (
+              (g.home_team_id = pgs.team_id AND g.away_team_id = %s)
+              OR (g.away_team_id = pgs.team_id AND g.home_team_id = %s)
+            )
+            """
+            params.extend([opponent.id, opponent.id])
+            team_note = f"Opponent scope: {opponent.name}."
+        elif context.teams:
+            team = context.teams[0]
+            team_clause = "AND pgs.team_id = %s"
+            params.append(team.id)
+            team_note = f"Team scope: {team.name}."
+
+        params.extend(season_params)
+
+        sql = f"""
+        SELECT
+          p.player_name,
+          %s AS primary_metric,
+          COUNT(*) AS games,
+          ROUND(AVG(pgs.points)::numeric, 2) AS avg_points,
+          ROUND(AVG(pgs.assists)::numeric, 2) AS avg_assists,
+          ROUND(AVG(pgs.rebounds)::numeric, 2) AS avg_rebounds,
+          ROUND(AVG(pgs.steals)::numeric, 2) AS avg_steals,
+          ROUND(AVG(pgs.blocks)::numeric, 2) AS avg_blocks,
+          ROUND(AVG(pgs.turnovers)::numeric, 2) AS avg_turnovers,
+          ROUND(AVG(pgs.minutes)::numeric, 2) AS avg_minutes,
+          ROUND(AVG(pgs.{metric})::numeric, 2) AS primary_metric_avg
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        JOIN seasons s ON s.season_id = g.season_id
+        WHERE pgs.player_id = %s
+          {team_clause}
+          {game_scope_clause}
+          {season_clause}
+        GROUP BY p.player_name;
+        """
+
+        return SQLPlan(
+            sql=sql,
+            params=tuple(params),
+            source="template",
+            notes=[
+                f"Player profile metric focus: {metric}.",
+                game_scope_note,
+                team_note,
+                season_note,
+            ],
+        )
+
+    def _build_player_single_game_high(self, context: ResolvedContext) -> SQLPlan | None:
+        if not context.players:
+            return None
+
+        player = context.players[0]
+        metric = self._safe_player_metric(context.primary_metric)
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
+
+        team_clause = ""
+        team_note = "Team scope: all teams."
+        params: list[object] = [metric, player.id]
+
+        if context.teams and context.against_mode:
+            opponent = context.teams[0]
+            team_clause = """
+            AND (
+              (g.home_team_id = pgs.team_id AND g.away_team_id = %s)
+              OR (g.away_team_id = pgs.team_id AND g.home_team_id = %s)
+            )
+            """
+            params.extend([opponent.id, opponent.id])
+            team_note = f"Opponent scope: {opponent.name}."
+        elif context.teams:
+            team = context.teams[0]
+            team_clause = "AND pgs.team_id = %s"
+            params.append(team.id)
+            team_note = f"Team scope: {team.name}."
+
+        params.extend(season_params)
+
+        sql = f"""
+        SELECT
+          p.player_name,
+          %s AS metric_name,
+          pgs.{metric} AS metric_value,
+          g.game_date,
+          s.season_label,
+          team.team_name,
+          opp.team_name AS opponent_team,
+          g.game_type
+        FROM player_game_stats pgs
+        JOIN players p ON p.player_id = pgs.player_id
+        JOIN games g ON g.game_id = pgs.game_id
+        JOIN seasons s ON s.season_id = g.season_id
+        JOIN teams team ON team.team_id = pgs.team_id
+        JOIN teams opp ON opp.team_id = CASE
+          WHEN g.home_team_id = pgs.team_id THEN g.away_team_id
+          ELSE g.home_team_id
+        END
+        WHERE pgs.player_id = %s
+          {team_clause}
+          {game_scope_clause}
+          {season_clause}
+          AND pgs.{metric} IS NOT NULL
+        ORDER BY pgs.{metric} DESC, g.game_date DESC
+        LIMIT 1;
+        """
+
+        return SQLPlan(
+            sql=sql,
+            params=tuple(params),
+            source="template",
+            notes=[
+                f"Single-game high for {player.name} using metric {metric}.",
+                game_scope_note,
+                team_note,
+                season_note,
+            ],
+        )
+
     def _build_team_comparison(self, context: ResolvedContext) -> SQLPlan | None:
         if len(context.teams) < 2:
             return None
@@ -130,6 +283,7 @@ class TemplateSQLBuilder:
         team_a = context.teams[0]
         team_b = context.teams[1]
         game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
 
         sql = f"""
         SELECT
@@ -145,15 +299,16 @@ class TemplateSQLBuilder:
         JOIN teams t ON t.team_id = tgr.team_id
         WHERE tgr.team_id IN (%s, %s)
           {game_scope_clause}
+          {season_clause}
         GROUP BY s.start_year, s.season_label, t.team_name
         ORDER BY s.start_year, t.team_name;
         """
 
         return SQLPlan(
             sql=sql,
-            params=(team_a.id, team_b.id),
+            params=(team_a.id, team_b.id, *season_params),
             source="template",
-            notes=[f"Comparing {team_a.name} vs {team_b.name}", game_scope_note],
+            notes=[f"Comparing {team_a.name} vs {team_b.name}", game_scope_note, season_note],
         )
 
     def _build_team_trend(self, context: ResolvedContext) -> SQLPlan | None:
@@ -162,6 +317,7 @@ class TemplateSQLBuilder:
 
         team = context.teams[0]
         game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
 
         sql = f"""
         SELECT
@@ -176,21 +332,149 @@ class TemplateSQLBuilder:
         JOIN seasons s ON s.season_id = g.season_id
         WHERE tgr.team_id = %s
           {game_scope_clause}
+          {season_clause}
         GROUP BY s.start_year, s.season_label
         ORDER BY s.start_year;
         """
 
         return SQLPlan(
             sql=sql,
-            params=(team.id,),
+            params=(team.id, *season_params),
             source="template",
-            notes=[f"Trend for {team.name}", game_scope_note],
+            notes=[f"Trend for {team.name}", game_scope_note, season_note],
+        )
+
+    def _build_team_record_summary(self, context: ResolvedContext) -> SQLPlan | None:
+        if not context.teams:
+            return None
+
+        team = context.teams[0]
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
+
+        sql = f"""
+        SELECT
+          t.team_name,
+          COUNT(*) AS games,
+          SUM(CASE WHEN tgr.is_win = 1 THEN 1 ELSE 0 END) AS wins,
+          SUM(CASE WHEN tgr.is_win = 0 THEN 1 ELSE 0 END) AS losses,
+          ROUND(AVG(tgr.is_win::numeric) * 100, 2) AS win_pct,
+          ROUND(AVG(tgr.team_points)::numeric, 2) AS avg_points,
+          ROUND(AVG(tgr.opponent_points)::numeric, 2) AS avg_points_allowed
+        FROM team_game_results tgr
+        JOIN games g ON g.game_id = tgr.game_id
+        JOIN seasons s ON s.season_id = g.season_id
+        JOIN teams t ON t.team_id = tgr.team_id
+        WHERE tgr.team_id = %s
+          {game_scope_clause}
+          {season_clause}
+        GROUP BY t.team_name;
+        """
+
+        return SQLPlan(
+            sql=sql,
+            params=(team.id, *season_params),
+            source="template",
+            notes=[f"Team record for {team.name}", game_scope_note, season_note],
+        )
+
+    def _build_team_head_to_head(self, context: ResolvedContext) -> SQLPlan | None:
+        if len(context.teams) < 2:
+            return None
+
+        team_a = context.teams[0]
+        team_b = context.teams[1]
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
+        params: list[object] = [
+            team_a.id,
+            team_b.id,
+            team_a.id,
+            team_a.id,
+            team_b.id,
+            team_a.id,
+            team_b.id,
+            team_b.id,
+            team_a.id,
+        ]
+        params.extend(season_params)
+
+        sql = f"""
+        SELECT
+          ta.team_name AS team_a,
+          tb.team_name AS team_b,
+          COUNT(*) AS games,
+          SUM(CASE WHEN g.winner_team_id = %s THEN 1 ELSE 0 END) AS team_a_wins,
+          SUM(CASE WHEN g.winner_team_id = %s THEN 1 ELSE 0 END) AS team_b_wins,
+          ROUND(AVG(CASE WHEN g.winner_team_id = %s THEN 1 ELSE 0 END)::numeric * 100, 2)
+            AS team_a_win_pct
+        FROM games g
+        JOIN teams ta ON ta.team_id = %s
+        JOIN teams tb ON tb.team_id = %s
+        WHERE (
+            (g.home_team_id = %s AND g.away_team_id = %s)
+            OR (g.home_team_id = %s AND g.away_team_id = %s)
+          )
+          {game_scope_clause}
+          {season_clause}
+        GROUP BY ta.team_name, tb.team_name;
+        """
+
+        return SQLPlan(
+            sql=sql,
+            params=tuple(params),
+            source="template",
+            notes=[
+                f"Head-to-head: {team_a.name} vs {team_b.name}",
+                game_scope_note,
+                season_note,
+            ],
+        )
+
+    def _build_team_ranking(self, context: ResolvedContext) -> SQLPlan:
+        game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        season_clause, season_params, season_note = self._season_clause(context)
+        metric_alias, metric_expr, metric_direction = self._team_ranking_metric(context.primary_metric)
+        ranking_limit = max(1, min(context.ranking_limit, 50))
+
+        sql = f"""
+        SELECT
+          t.team_name,
+          COUNT(*) AS games,
+          SUM(CASE WHEN tgr.is_win = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND(AVG(tgr.is_win::numeric) * 100, 2) AS win_pct,
+          ROUND(AVG(tgr.team_points)::numeric, 2) AS avg_points,
+          ROUND(AVG(tgr.opponent_points)::numeric, 2) AS avg_points_allowed,
+          {metric_expr} AS metric_value
+        FROM team_game_results tgr
+        JOIN teams t ON t.team_id = tgr.team_id
+        JOIN games g ON g.game_id = tgr.game_id
+        JOIN seasons s ON s.season_id = g.season_id
+        WHERE 1=1
+          {game_scope_clause}
+          {season_clause}
+        GROUP BY t.team_name
+        HAVING COUNT(*) >= 20
+        ORDER BY metric_value {metric_direction}
+        LIMIT {ranking_limit};
+        """
+
+        return SQLPlan(
+            sql=sql,
+            params=tuple(season_params),
+            source="template",
+            notes=[
+                f"Team ranking metric: {metric_alias}",
+                game_scope_note,
+                season_note,
+                f"Ranking limit: top {ranking_limit}",
+            ],
         )
 
     def _build_player_ranking(self, context: ResolvedContext) -> SQLPlan:
-        season_filter = ""
-        params: list[object] = []
+        season_filter, season_params, season_note = self._season_clause(context)
         game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
+        ranking_limit = max(1, min(context.ranking_limit, 50))
 
         metric_map = {
             "points": ("avg_points", "AVG(pgs.points)"),
@@ -198,12 +482,10 @@ class TemplateSQLBuilder:
             "rebounds": ("avg_rebounds", "AVG(pgs.rebounds)"),
             "steals": ("avg_steals", "AVG(pgs.steals)"),
             "blocks": ("avg_blocks", "AVG(pgs.blocks)"),
+            "turnovers": ("avg_turnovers", "AVG(pgs.turnovers)"),
+            "minutes": ("avg_minutes", "AVG(pgs.minutes)"),
         }
         order_alias, order_expr = metric_map.get(context.ranking_metric, metric_map["points"])
-
-        if context.seasons:
-            season_filter = "AND s.season_label = %s"
-            params.append(context.seasons[0])
 
         sql = f"""
         SELECT
@@ -212,6 +494,8 @@ class TemplateSQLBuilder:
           ROUND(AVG(pgs.points)::numeric, 2) AS avg_points,
           ROUND(AVG(pgs.assists)::numeric, 2) AS avg_assists,
           ROUND(AVG(pgs.rebounds)::numeric, 2) AS avg_rebounds,
+          ROUND(AVG(pgs.turnovers)::numeric, 2) AS avg_turnovers,
+          ROUND(AVG(pgs.minutes)::numeric, 2) AS avg_minutes,
           ROUND(({order_expr})::numeric, 2) AS metric_value
         FROM player_game_stats pgs
         JOIN players p ON p.player_id = pgs.player_id
@@ -223,17 +507,19 @@ class TemplateSQLBuilder:
         GROUP BY p.player_name
         HAVING COUNT(*) >= 20
         ORDER BY {order_alias} DESC
-        LIMIT 15;
+        LIMIT {ranking_limit};
         """
 
         return SQLPlan(
             sql=sql,
-            params=tuple(params),
+            params=tuple(season_params),
             source="template",
             notes=[
                 "Ranking query uses minimum 20 games played.",
                 f"Ranking metric: {context.ranking_metric}",
                 game_scope_note,
+                season_note,
+                f"Ranking limit: top {ranking_limit}",
             ],
         )
 
@@ -248,7 +534,7 @@ class TemplateSQLBuilder:
             "under": "<",
             "exactly": "=",
         }
-        metric_priority = ["points", "rebounds", "assists", "steals", "blocks"]
+        metric_priority = ["points", "rebounds", "assists", "steals", "blocks", "turnovers"]
         for stat in metric_priority:
             for suffix, op in comparator_map.items():
                 key = f"{stat}_{suffix}"
@@ -264,3 +550,27 @@ class TemplateSQLBuilder:
         if game_scope == "preseason":
             return "AND g.game_type = 'preseason'", "Game scope: preseason."
         return "AND g.game_type = 'regular'", "Game scope: regular season (default)."
+
+    def _season_clause(self, context: ResolvedContext) -> tuple[str, tuple[object, ...], str]:
+        if not context.seasons:
+            return "", (), "Season scope: all available seasons."
+        return "AND s.season_label = %s", (context.seasons[0],), f"Season scope: {context.seasons[0]}."
+
+    def _safe_player_metric(self, metric: str) -> str:
+        allowed = {"points", "assists", "rebounds", "steals", "blocks", "turnovers", "minutes"}
+        if metric in allowed:
+            return metric
+        return "points"
+
+    def _team_ranking_metric(self, metric: str) -> tuple[str, str, str]:
+        metric_map = {
+            "win_pct": ("win_pct", "ROUND(AVG(tgr.is_win::numeric) * 100, 2)", "DESC"),
+            "wins": ("wins", "SUM(CASE WHEN tgr.is_win = 1 THEN 1 ELSE 0 END)", "DESC"),
+            "points": ("avg_points", "ROUND(AVG(tgr.team_points)::numeric, 2)", "DESC"),
+            "opponent_points": (
+                "avg_points_allowed",
+                "ROUND(AVG(tgr.opponent_points)::numeric, 2)",
+                "ASC",
+            ),
+        }
+        return metric_map.get(metric, metric_map["win_pct"])

@@ -41,8 +41,12 @@ class AnalyticsAgent:
         )
 
     def answer(self, question: str) -> AgentResponse:
-        intent = classify_intent(question)
         resolved = self.resolver.resolve(question)
+        intent = classify_intent(
+            question,
+            team_count=len(resolved.teams),
+            player_count=len(resolved.players),
+        )
 
         plan = self.templates.build(intent, resolved)
 
@@ -96,7 +100,10 @@ class AnalyticsAgent:
             "seasons": resolved.seasons,
             "thresholds": resolved.thresholds,
             "game_scope": resolved.game_scope,
+            "primary_metric": resolved.primary_metric,
             "ranking_metric": resolved.ranking_metric,
+            "ranking_limit": resolved.ranking_limit,
+            "against_mode": resolved.against_mode,
             "notes": plan.notes,
             "ambiguities": resolved.ambiguities,
             "row_count": len(result.rows),

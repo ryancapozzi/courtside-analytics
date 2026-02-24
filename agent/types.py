@@ -8,8 +8,13 @@ from typing import Any
 class IntentType(str, Enum):
     CONDITIONAL_TEAM_PERFORMANCE = "conditional_team_performance"
     PLAYER_THRESHOLD_COUNT = "player_threshold_count"
+    PLAYER_PROFILE_SUMMARY = "player_profile_summary"
+    PLAYER_SINGLE_GAME_HIGH = "player_single_game_high"
     TEAM_COMPARISON = "team_comparison"
     TEAM_TREND = "team_trend"
+    TEAM_RECORD_SUMMARY = "team_record_summary"
+    TEAM_HEAD_TO_HEAD = "team_head_to_head"
+    TEAM_RANKING = "team_ranking"
     PLAYER_RANKING = "player_ranking"
     UNKNOWN = "unknown"
 
@@ -28,7 +33,10 @@ class ResolvedContext:
     seasons: list[str] = field(default_factory=list)
     thresholds: dict[str, float] = field(default_factory=dict)
     game_scope: str = "regular"
+    primary_metric: str = "points"
     ranking_metric: str = "points"
+    ranking_limit: int = 15
+    against_mode: bool = False
     ambiguities: list[str] = field(default_factory=list)
 
 
