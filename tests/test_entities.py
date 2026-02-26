@@ -38,3 +38,15 @@ def test_resolve_seasons_expands_year_range() -> None:
     )
 
     assert resolved == ["2014-15", "2015-16", "2016-17"]
+
+
+def test_resolve_seasons_expands_season_label_range() -> None:
+    resolver = EntityResolver(database_url="postgresql://unused")
+    seasons = ["2013-14", "2014-15", "2015-16", "2016-17", "2017-18"]
+
+    resolved = resolver._resolve_seasons(
+        "How many assists from 2014-15 to 2016-17?",
+        seasons,
+    )
+
+    assert resolved == ["2014-15", "2015-16", "2016-17"]

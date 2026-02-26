@@ -22,6 +22,10 @@ YEAR_RANGE_RE = re.compile(
     r"(?:from\s+)?(20\d{2})\s*(?:-|to|through|thru|until)\s*(20\d{2})",
     re.IGNORECASE,
 )
+SEASON_LABEL_RANGE_RE = re.compile(
+    r"(20\d{2}-\d{2})\s*(?:to|through|thru|until)\s*(20\d{2}-\d{2})",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -172,6 +176,15 @@ class EntityResolver:
                 if mapped:
                     normalized.append(mapped)
 
+        for start_label, end_label in self._extract_season_label_ranges(question):
+            if start_label not in season_index or end_label not in season_index:
+                continue
+            start_idx = season_index[start_label]
+            end_idx = season_index[end_label]
+            lo = min(start_idx, end_idx)
+            hi = max(start_idx, end_idx)
+            normalized.extend(available_seasons[lo : hi + 1])
+
         for start_year, end_year in self._extract_year_ranges(question):
             year_start = min(start_year, end_year)
             year_end = max(start_year, end_year)
@@ -217,6 +230,12 @@ class EntityResolver:
             start = int(match.group(1))
             end = int(match.group(2))
             out.append((start, end))
+        return out
+
+    def _extract_season_label_ranges(self, question: str) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for match in SEASON_LABEL_RANGE_RE.finditer(question):
+            out.append((match.group(1), match.group(2)))
         return out
 
     def _season_start_year(self, season_label: str) -> int:

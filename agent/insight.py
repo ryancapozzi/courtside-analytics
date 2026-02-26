@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -20,7 +21,8 @@ class InsightGenerator:
 
         templated = self._deterministic_summary(result)
         if templated is not None:
-            return templated
+            rewritten = self._rewrite_with_ollama(question, templated)
+            return rewritten or templated
 
         sample_rows = result.rows[:10]
 
@@ -113,6 +115,9 @@ class InsightGenerator:
                     f" In those games, {player} averaged "
                     f"{self._as_float(avg_stat_value):.2f} {stat}."
                 )
+            caveat = self._sample_size_caveat(games)
+            if caveat:
+                summary += f" {caveat}"
             return summary
 
         player_profile_cols = {
@@ -143,6 +148,9 @@ class InsightGenerator:
                 )
                 if per_game is not None:
                     summary += f" That is {per_game:.2f} {metric} per game."
+                caveat = self._sample_size_caveat(games)
+                if caveat:
+                    summary += f" {caveat}"
                 return summary
 
             if operation == "count":
@@ -167,9 +175,13 @@ class InsightGenerator:
                 )
 
             avg_value = self._as_float(requested_value)
-            return (
+            summary = (
                 f"{player} averaged {avg_value:.2f} {metric} across {games} games in this scope."
             )
+            caveat = self._sample_size_caveat(games)
+            if caveat:
+                summary += f" {caveat}"
+            return summary
 
         single_game_high_cols = {"player_name", "metric_name", "metric_value", "game_date"}
         if single_game_high_cols.issubset(cols) and result.rows:
@@ -294,3 +306,51 @@ class InsightGenerator:
         if value.is_integer():
             return str(int(value))
         return f"{value:.2f}"
+
+    def _sample_size_caveat(self, games: int) -> str | None:
+        if games < 5:
+            return "Caveat: very small sample size."
+        if games < 15:
+            return "Caveat: small sample size."
+        return None
+
+    def _rewrite_with_ollama(self, question: str, factual_summary: str) -> str | None:
+        system_prompt = (
+            "You are an NBA analyst. Rewrite the factual summary in natural, concise analyst language. "
+            "Use only the provided facts. Keep all numeric values exactly unchanged. "
+            "Do not add or infer any new stats."
+        )
+        user_prompt = "\n".join(
+            [
+                f"Question: {question}",
+                f"Factual summary: {factual_summary}",
+                "Return one short paragraph.",
+            ]
+        )
+
+        try:
+            candidate = self.ollama.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+            )
+        except Exception:
+            return None
+
+        if not candidate:
+            return None
+
+        if not self._preserves_numbers(factual_summary, candidate):
+            return None
+
+        return candidate
+
+    def _preserves_numbers(self, source: str, candidate: str) -> bool:
+        source_numbers = re.findall(r"\d+(?:\.\d+)?", source)
+        if not source_numbers:
+            return True
+        candidate_numbers = set(re.findall(r"\d+(?:\.\d+)?", candidate))
+        return all(number in candidate_numbers for number in source_numbers)

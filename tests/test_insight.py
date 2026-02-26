@@ -7,6 +7,11 @@ class DummyOllama:
         return "dummy"
 
 
+class NumericPreservingOllama:
+    def chat(self, model: str, messages: list[dict[str, str]], temperature: float = 0.0) -> str:
+        return "LeBron James recorded 688 total assists across 82 games. That equals 8.39 assists per game."
+
+
 def test_deterministic_conditional_summary_uses_exact_values() -> None:
     insight = InsightGenerator(DummyOllama(), model="dummy")
     result = QueryResult(
@@ -240,3 +245,24 @@ def test_deterministic_player_profile_summary_avg_operation() -> None:
     text = insight.summarize("q", result)
 
     assert "LeBron James averaged 8.50 assists" in text
+
+
+def test_rewrite_with_ollama_uses_natural_copy_when_numbers_preserved() -> None:
+    insight = InsightGenerator(NumericPreservingOllama(), model="dummy")
+    result = QueryResult(
+        columns=["player_name", "metric_name", "stat_operation", "games", "requested_value", "per_game_value"],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 82,
+                "requested_value": 688,
+                "per_game_value": 8.39,
+            }
+        ],
+    )
+
+    text = insight.summarize("How many assists did LeBron have?", result)
+
+    assert text.startswith("LeBron James recorded 688 total assists")
