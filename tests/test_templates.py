@@ -72,6 +72,7 @@ def test_player_profile_summary_with_opponent_filter() -> None:
         against_mode=True,
         game_scope="playoffs",
         primary_metric="assists",
+        stat_operation="sum",
     )
 
     plan = builder.build(IntentType.PLAYER_PROFILE_SUMMARY, context)
@@ -79,7 +80,8 @@ def test_player_profile_summary_with_opponent_filter() -> None:
     assert plan is not None
     assert "g.away_team_id = %s" in plan.sql
     assert "g.game_type = 'playoffs'" in plan.sql
-    assert "AVG(pgs.assists)" in plan.sql
+    assert "SUM(COALESCE(pgs.assists, 0))" in plan.sql
+    assert "requested_value" in plan.sql
 
 
 def test_player_single_game_high_template() -> None:
@@ -138,3 +140,19 @@ def test_team_ranking_template() -> None:
     assert plan is not None
     assert "ORDER BY metric_value ASC" in plan.sql
     assert "LIMIT 5" in plan.sql
+
+
+def test_player_profile_summary_uses_season_range_clause() -> None:
+    builder = TemplateSQLBuilder()
+    context = ResolvedContext(
+        players=[ResolvedEntity(id="2544", name="LeBron James")],
+        primary_metric="assists",
+        stat_operation="sum",
+        seasons=["2014-15", "2015-16", "2016-17"],
+    )
+
+    plan = builder.build(IntentType.PLAYER_PROFILE_SUMMARY, context)
+
+    assert plan is not None
+    assert "s.season_label IN (%s, %s, %s)" in plan.sql
+    assert plan.params[-3:] == ("2014-15", "2015-16", "2016-17")

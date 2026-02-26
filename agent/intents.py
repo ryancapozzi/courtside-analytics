@@ -52,6 +52,11 @@ PLAYER_SINGLE_GAME_HIGH_RE = re.compile(
     re.IGNORECASE,
 )
 TREND_RE = re.compile(r"\b(trend|over time|by season)\b", re.IGNORECASE)
+AVERAGE_STYLE_RE = re.compile(r"\b(average|avg|averaging|per game|mean)\b", re.IGNORECASE)
+TOTAL_STYLE_RE = re.compile(r"\b(total|sum|combined|in total|altogether)\b", re.IGNORECASE)
+MAX_STYLE_RE = re.compile(r"\b(most|max|maximum|highest|peak)\b", re.IGNORECASE)
+MIN_STYLE_RE = re.compile(r"\b(min|minimum|lowest|fewest)\b", re.IGNORECASE)
+COUNT_STAT_STYLE_RE = re.compile(r"\b(count|how many)\b", re.IGNORECASE)
 
 
 def classify_intent(question: str, team_count: int = 0, player_count: int = 0) -> IntentType:
@@ -190,6 +195,33 @@ def extract_ranking_limit(question: str) -> int:
 def detect_against_mode(question: str) -> bool:
     text = question.lower()
     return " against " in f" {text} " or " vs " in f" {text} " or " versus " in f" {text} "
+
+
+def extract_stat_operation(question: str, primary_metric: str) -> str:
+    text = question.lower()
+
+    if primary_metric == "win_pct":
+        return "avg"
+
+    if AVERAGE_STYLE_RE.search(text):
+        return "avg"
+
+    if TOTAL_STYLE_RE.search(text):
+        return "sum"
+
+    if MAX_STYLE_RE.search(text) and "top" not in text and "rank" not in text:
+        return "max"
+
+    if MIN_STYLE_RE.search(text) and "top" not in text and "rank" not in text:
+        return "min"
+
+    if COUNT_STAT_STYLE_RE.search(text):
+        if any(token in text for token in ["how many games", "how many times", "how often"]):
+            return "count"
+        # "How many assists did X have?" is best interpreted as total assists.
+        return "sum"
+
+    return "avg"
 
 
 def _extract_implicit_thresholds(question: str) -> list[tuple[str, str, float]]:

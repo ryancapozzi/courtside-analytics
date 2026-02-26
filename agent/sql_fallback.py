@@ -38,6 +38,7 @@ class SQLFallbackGenerator:
                 f"Resolved seasons: {context.seasons}",
                 f"Thresholds: {context.thresholds}",
                 f"Primary metric: {context.primary_metric}",
+                f"Stat operation: {context.stat_operation}",
                 f"Ranking metric: {context.ranking_metric}",
                 f"Ranking limit: {context.ranking_limit}",
                 f"Against mode: {context.against_mode}",

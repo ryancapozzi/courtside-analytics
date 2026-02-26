@@ -76,31 +76,29 @@ def test_deterministic_player_profile_summary() -> None:
     result = QueryResult(
         columns=[
             "player_name",
-            "primary_metric",
+            "metric_name",
+            "stat_operation",
             "games",
-            "avg_points",
-            "avg_assists",
-            "avg_rebounds",
-            "primary_metric_avg",
+            "requested_value",
+            "per_game_value",
         ],
         rows=[
             {
                 "player_name": "LeBron James",
-                "primary_metric": "assists",
+                "metric_name": "assists",
+                "stat_operation": "sum",
                 "games": 82,
-                "avg_points": 27.1,
-                "avg_assists": 8.4,
-                "avg_rebounds": 7.8,
-                "primary_metric_avg": 8.4,
+                "requested_value": 688,
+                "per_game_value": 8.39,
             }
         ],
     )
 
     text = insight.summarize("q", result)
 
-    assert "LeBron James is averaging 27.10 points" in text
+    assert "LeBron James recorded 688 total assists" in text
     assert "82 games" in text
-    assert "Primary focus metric (assists) is 8.40." in text
+    assert "8.39 assists per game" in text
 
 
 def test_deterministic_team_record_summary() -> None:
@@ -222,3 +220,23 @@ def test_player_ranking_summary_not_misread_as_profile() -> None:
     text = insight.summarize("q", result)
 
     assert text.startswith("Top players from this query:")
+
+
+def test_deterministic_player_profile_summary_avg_operation() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=["player_name", "metric_name", "stat_operation", "games", "requested_value"],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "metric_name": "assists",
+                "stat_operation": "avg",
+                "games": 20,
+                "requested_value": 8.5,
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "LeBron James averaged 8.50 assists" in text

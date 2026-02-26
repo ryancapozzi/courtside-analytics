@@ -117,26 +117,58 @@ class InsightGenerator:
 
         player_profile_cols = {
             "player_name",
-            "primary_metric",
+            "metric_name",
+            "stat_operation",
             "games",
-            "avg_points",
-            "avg_assists",
-            "avg_rebounds",
-            "primary_metric_avg",
+            "requested_value",
         }
         if player_profile_cols.issubset(cols) and result.rows:
             row = result.rows[0]
             player = self._as_text(row.get("player_name"))
+            metric = self._as_text(row.get("metric_name")) or "points"
+            operation = self._as_text(row.get("stat_operation")) or "avg"
             games = self._as_int(row.get("games"))
-            avg_points = self._as_float(row.get("avg_points"))
-            avg_assists = self._as_float(row.get("avg_assists"))
-            avg_rebounds = self._as_float(row.get("avg_rebounds"))
-            metric = self._as_text(row.get("primary_metric")) or "points"
-            metric_avg = self._as_float(row.get("primary_metric_avg", avg_points))
+            requested_value = row.get("requested_value")
+            per_game_value = row.get("per_game_value")
+
+            if requested_value is None:
+                return f"{player} has no recorded {metric} values in this scope."
+
+            if operation == "sum":
+                total_value = self._as_float(requested_value)
+                per_game = self._as_float(per_game_value) if per_game_value is not None else None
+                summary = (
+                    f"{player} recorded {self._fmt_number(total_value)} total {metric} "
+                    f"across {games} games in this scope."
+                )
+                if per_game is not None:
+                    summary += f" That is {per_game:.2f} {metric} per game."
+                return summary
+
+            if operation == "count":
+                count_value = self._as_int(requested_value)
+                return (
+                    f"{player} has {count_value} games with recorded {metric} in this scope "
+                    f"(across {games} total games)."
+                )
+
+            if operation == "max":
+                max_value = self._as_float(requested_value)
+                return (
+                    f"{player}'s highest single-game {metric} in this scope is "
+                    f"{self._fmt_number(max_value)}."
+                )
+
+            if operation == "min":
+                min_value = self._as_float(requested_value)
+                return (
+                    f"{player}'s lowest single-game {metric} in this scope is "
+                    f"{self._fmt_number(min_value)}."
+                )
+
+            avg_value = self._as_float(requested_value)
             return (
-                f"{player} is averaging {avg_points:.2f} points, {avg_assists:.2f} assists, and "
-                f"{avg_rebounds:.2f} rebounds across {games} games. "
-                f"Primary focus metric ({metric}) is {metric_avg:.2f}."
+                f"{player} averaged {avg_value:.2f} {metric} across {games} games in this scope."
             )
 
         single_game_high_cols = {"player_name", "metric_name", "metric_value", "game_date"}
@@ -257,3 +289,8 @@ class InsightGenerator:
         latest = rows[-1].get("season_label")
         latest_rows = [row for row in rows if row.get("season_label") == latest]
         return latest_rows if latest_rows else rows[-2:]
+
+    def _fmt_number(self, value: float) -> str:
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.2f}"

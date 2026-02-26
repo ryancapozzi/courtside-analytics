@@ -4,6 +4,7 @@ from agent.intents import (
     extract_primary_metric,
     extract_ranking_limit,
     extract_ranking_metric,
+    extract_stat_operation,
     extract_thresholds,
 )
 from agent.types import IntentType
@@ -101,3 +102,13 @@ def test_extract_primary_metric_from_allow_points_phrase() -> None:
 
 def test_extract_ranking_limit() -> None:
     assert extract_ranking_limit("Who are the top 7 players by points?") == 7
+
+
+def test_extract_stat_operation_sum_for_how_many_metric() -> None:
+    question = "How many assists has LeBron James had from 2014 to 2024?"
+    assert extract_stat_operation(question, primary_metric="assists") == "sum"
+
+
+def test_extract_stat_operation_avg() -> None:
+    question = "What is LeBron James averaging in assists this season?"
+    assert extract_stat_operation(question, primary_metric="assists") == "avg"

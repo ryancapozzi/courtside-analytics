@@ -101,6 +101,7 @@ class AnalyticsAgent:
             "thresholds": resolved.thresholds,
             "game_scope": resolved.game_scope,
             "primary_metric": resolved.primary_metric,
+            "stat_operation": resolved.stat_operation,
             "ranking_metric": resolved.ranking_metric,
             "ranking_limit": resolved.ranking_limit,
             "against_mode": resolved.against_mode,

@@ -27,3 +27,14 @@ def test_resolve_seasons_numeric_year_maps_to_label() -> None:
 
     assert resolved == ["2024-25"]
 
+
+def test_resolve_seasons_expands_year_range() -> None:
+    resolver = EntityResolver(database_url="postgresql://unused")
+    seasons = ["2013-14", "2014-15", "2015-16", "2016-17", "2017-18"]
+
+    resolved = resolver._resolve_seasons(
+        "How many assists has LeBron James had from 2014 to 2016?",
+        seasons,
+    )
+
+    assert resolved == ["2014-15", "2015-16", "2016-17"]

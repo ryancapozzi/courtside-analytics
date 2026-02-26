@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import psycopg
@@ -11,10 +12,16 @@ from .intents import (
     extract_primary_metric,
     extract_ranking_metric,
     extract_ranking_limit,
+    extract_stat_operation,
     extract_season_mentions,
     extract_thresholds,
 )
 from .types import ResolvedContext, ResolvedEntity
+
+YEAR_RANGE_RE = re.compile(
+    r"(?:from\s+)?(20\d{2})\s*(?:-|to|through|thru|until)\s*(20\d{2})",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -38,6 +45,7 @@ class EntityResolver:
         context.thresholds = extract_thresholds(question)
         context.game_scope = extract_game_scope(question)
         context.primary_metric = extract_primary_metric(question)
+        context.stat_operation = extract_stat_operation(question, context.primary_metric)
         context.ranking_metric = extract_ranking_metric(question)
         context.ranking_limit = extract_ranking_limit(question)
         context.against_mode = detect_against_mode(question)
@@ -152,6 +160,7 @@ class EntityResolver:
         explicit_tokens = extract_season_mentions(question)
         normalized: list[str] = []
         available_set = set(available_seasons)
+        season_index = {label: idx for idx, label in enumerate(available_seasons)}
 
         for token in explicit_tokens:
             if token in available_set:
@@ -162,6 +171,16 @@ class EntityResolver:
                 mapped = self._map_year_to_season(int(token), available_seasons)
                 if mapped:
                     normalized.append(mapped)
+
+        for start_year, end_year in self._extract_year_ranges(question):
+            year_start = min(start_year, end_year)
+            year_end = max(start_year, end_year)
+            expanded = [
+                label
+                for label in available_seasons
+                if year_start <= self._season_start_year(label) <= year_end
+            ]
+            normalized.extend(expanded)
 
         lower_q = question.lower()
         if not normalized and ("this season" in lower_q or "current season" in lower_q):
@@ -177,6 +196,7 @@ class EntityResolver:
                 continue
             seen.add(label)
             deduped.append(label)
+        deduped.sort(key=lambda label: season_index.get(label, 10**9))
         return deduped
 
     def _map_year_to_season(self, year: int, available_seasons: list[str]) -> str | None:
@@ -190,3 +210,15 @@ class EntityResolver:
             return end_year_match[-1]
 
         return None
+
+    def _extract_year_ranges(self, question: str) -> list[tuple[int, int]]:
+        out: list[tuple[int, int]] = []
+        for match in YEAR_RANGE_RE.finditer(question):
+            start = int(match.group(1))
+            end = int(match.group(2))
+            out.append((start, end))
+        return out
+
+    def _season_start_year(self, season_label: str) -> int:
+        start = season_label.split("-", 1)[0]
+        return int(start)

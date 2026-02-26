@@ -144,12 +144,13 @@ class TemplateSQLBuilder:
 
         player = context.players[0]
         metric = self._safe_player_metric(context.primary_metric)
+        stat_operation = self._safe_stat_operation(context.stat_operation)
         game_scope_clause, game_scope_note = self._scope_clause(context.game_scope)
         season_clause, season_params, season_note = self._season_clause(context)
 
         team_clause = ""
         team_note = "Team scope: all teams."
-        params: list[object] = [metric, player.id]
+        params: list[object] = [metric, stat_operation, player.id]
 
         if context.teams and context.against_mode:
             opponent = context.teams[0]
@@ -168,20 +169,21 @@ class TemplateSQLBuilder:
             team_note = f"Team scope: {team.name}."
 
         params.extend(season_params)
+        requested_value_expr = self._player_operation_expression(metric, stat_operation)
 
         sql = f"""
         SELECT
           p.player_name,
-          %s AS primary_metric,
+          %s AS metric_name,
+          %s AS stat_operation,
           COUNT(*) AS games,
-          ROUND(AVG(pgs.points)::numeric, 2) AS avg_points,
-          ROUND(AVG(pgs.assists)::numeric, 2) AS avg_assists,
-          ROUND(AVG(pgs.rebounds)::numeric, 2) AS avg_rebounds,
-          ROUND(AVG(pgs.steals)::numeric, 2) AS avg_steals,
-          ROUND(AVG(pgs.blocks)::numeric, 2) AS avg_blocks,
-          ROUND(AVG(pgs.turnovers)::numeric, 2) AS avg_turnovers,
-          ROUND(AVG(pgs.minutes)::numeric, 2) AS avg_minutes,
-          ROUND(AVG(pgs.{metric})::numeric, 2) AS primary_metric_avg
+          ROUND(SUM(COALESCE(pgs.{metric}, 0))::numeric, 2) AS total_value,
+          ROUND(AVG(pgs.{metric})::numeric, 2) AS avg_value,
+          ROUND(MAX(pgs.{metric})::numeric, 2) AS max_value,
+          ROUND(MIN(pgs.{metric})::numeric, 2) AS min_value,
+          COUNT(pgs.{metric}) AS non_null_games,
+          ROUND((SUM(COALESCE(pgs.{metric}, 0))::numeric / NULLIF(COUNT(*), 0))::numeric, 2) AS per_game_value,
+          {requested_value_expr} AS requested_value
         FROM player_game_stats pgs
         JOIN players p ON p.player_id = pgs.player_id
         JOIN games g ON g.game_id = pgs.game_id
@@ -198,7 +200,8 @@ class TemplateSQLBuilder:
             params=tuple(params),
             source="template",
             notes=[
-                f"Player profile metric focus: {metric}.",
+                f"Player stat query metric: {metric}.",
+                f"Operation: {stat_operation}.",
                 game_scope_note,
                 team_note,
                 season_note,
@@ -554,13 +557,38 @@ class TemplateSQLBuilder:
     def _season_clause(self, context: ResolvedContext) -> tuple[str, tuple[object, ...], str]:
         if not context.seasons:
             return "", (), "Season scope: all available seasons."
-        return "AND s.season_label = %s", (context.seasons[0],), f"Season scope: {context.seasons[0]}."
+        if len(context.seasons) == 1:
+            season = context.seasons[0]
+            return "AND s.season_label = %s", (season,), f"Season scope: {season}."
+        placeholders = ", ".join(["%s"] * len(context.seasons))
+        clause = f"AND s.season_label IN ({placeholders})"
+        first = context.seasons[0]
+        last = context.seasons[-1]
+        note = f"Season scope: {first} to {last} ({len(context.seasons)} seasons)."
+        return clause, tuple(context.seasons), note
 
     def _safe_player_metric(self, metric: str) -> str:
         allowed = {"points", "assists", "rebounds", "steals", "blocks", "turnovers", "minutes"}
         if metric in allowed:
             return metric
         return "points"
+
+    def _safe_stat_operation(self, operation: str) -> str:
+        allowed = {"sum", "avg", "max", "min", "count"}
+        if operation in allowed:
+            return operation
+        return "avg"
+
+    def _player_operation_expression(self, metric: str, operation: str) -> str:
+        if operation == "sum":
+            return f"ROUND(SUM(COALESCE(pgs.{metric}, 0))::numeric, 2)"
+        if operation == "max":
+            return f"ROUND(MAX(pgs.{metric})::numeric, 2)"
+        if operation == "min":
+            return f"ROUND(MIN(pgs.{metric})::numeric, 2)"
+        if operation == "count":
+            return f"COUNT(pgs.{metric})"
+        return f"ROUND(AVG(pgs.{metric})::numeric, 2)"
 
     def _team_ranking_metric(self, metric: str) -> tuple[str, str, str]:
         metric_map = {

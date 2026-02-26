@@ -26,6 +26,12 @@ from agent.types import IntentType
             IntentType.PLAYER_PROFILE_SUMMARY,
         ),
         (
+            "How many assists has LeBron James had from 2014 to 2024?",
+            0,
+            1,
+            IntentType.PLAYER_PROFILE_SUMMARY,
+        ),
+        (
             "How does Stephen Curry perform against the Lakers in playoffs?",
             1,
             1,
@@ -88,4 +94,3 @@ def test_question_intent_coverage(
     expected: IntentType,
 ) -> None:
     assert classify_intent(question, team_count=team_count, player_count=player_count) == expected
-
