@@ -31,3 +31,26 @@ def test_evaluate_results_counts_findings() -> None:
     assert summary.intent_matches == 1
     assert len(findings) == 1
     assert findings[0]["id"] == 2
+
+
+def test_evaluate_results_handles_empty_inputs() -> None:
+    summary, findings = evaluate_results([], [])
+
+    assert summary.total_questions == 0
+    assert summary.sql_generated == 0
+    assert summary.non_empty_results == 0
+    assert summary.intent_matches == 0
+    assert summary.template_ratio == 0.0
+    assert findings == []
+
+
+def test_evaluate_results_treats_missing_expected_intent_as_match() -> None:
+    questions = [{"id": 1, "expected_min_rows": 1}]
+    results = [{"id": 1, "intent": "unknown", "sql": "SELECT 1", "row_count": 1, "sql_source": "llm_fallback"}]
+
+    summary, findings = evaluate_results(questions, results)
+
+    assert summary.intent_matches == 1
+    assert summary.sql_generated == 1
+    assert summary.non_empty_results == 1
+    assert findings == []

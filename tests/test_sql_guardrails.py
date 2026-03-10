@@ -24,3 +24,14 @@ def test_blocks_mutation_keywords(guardrails: SQLGuardrails) -> None:
 def test_blocks_disallowed_tables(guardrails: SQLGuardrails) -> None:
     with pytest.raises(SQLValidationError):
         guardrails.validate_and_rewrite("SELECT * FROM secret_table")
+
+
+def test_keeps_existing_limit(guardrails: SQLGuardrails) -> None:
+    rewritten = guardrails.validate_and_rewrite("SELECT * FROM teams LIMIT 5")
+    assert "LIMIT 5" in rewritten
+    assert "LIMIT 100" not in rewritten
+
+
+def test_blocks_invalid_sql(guardrails: SQLGuardrails) -> None:
+    with pytest.raises(SQLValidationError, match="SQL parse failed"):
+        guardrails.validate_and_rewrite("SELECT * FROM teams WHERE (")

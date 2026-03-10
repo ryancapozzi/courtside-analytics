@@ -156,3 +156,18 @@ def test_player_profile_summary_uses_season_range_clause() -> None:
     assert plan is not None
     assert "s.season_label IN (%s, %s, %s)" in plan.sql
     assert plan.params[-3:] == ("2014-15", "2015-16", "2016-17")
+
+
+def test_build_returns_none_for_unknown_intent() -> None:
+    builder = TemplateSQLBuilder()
+    plan = builder.build(IntentType.UNKNOWN, ResolvedContext())
+    assert plan is None
+
+
+def test_team_comparison_template_requires_two_teams() -> None:
+    builder = TemplateSQLBuilder()
+    context = ResolvedContext(teams=[ResolvedEntity(id="1610612747", name="Lakers")])
+
+    plan = builder.build(IntentType.TEAM_COMPARISON, context)
+
+    assert plan is None

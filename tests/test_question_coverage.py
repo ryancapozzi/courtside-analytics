@@ -85,6 +85,18 @@ from agent.types import IntentType
             0,
             IntentType.PLAYER_RANKING,
         ),
+        (
+            "Who are the top 10 players by assists?",
+            0,
+            0,
+            IntentType.PLAYER_RANKING,
+        ),
+        (
+            "Show the trend by season for the Knicks.",
+            1,
+            0,
+            IntentType.TEAM_TREND,
+        ),
     ],
 )
 def test_question_intent_coverage(

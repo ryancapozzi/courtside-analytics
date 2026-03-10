@@ -50,3 +50,21 @@ def test_resolve_seasons_expands_season_label_range() -> None:
     )
 
     assert resolved == ["2014-15", "2015-16", "2016-17"]
+
+
+def test_resolve_seasons_numeric_year_can_map_from_end_year() -> None:
+    resolver = EntityResolver(database_url="postgresql://unused")
+    seasons = ["2022-23", "2023-24", "2024-25"]
+
+    resolved = resolver._resolve_seasons("How did they do in 2025?", seasons)
+
+    assert resolved == ["2024-25"]
+
+
+def test_resolve_seasons_unknown_year_returns_empty() -> None:
+    resolver = EntityResolver(database_url="postgresql://unused")
+    seasons = ["2022-23", "2023-24", "2024-25"]
+
+    resolved = resolver._resolve_seasons("How did they do in 2035?", seasons)
+
+    assert resolved == []

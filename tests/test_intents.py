@@ -80,6 +80,10 @@ def test_extract_game_scope_playoffs() -> None:
     assert extract_game_scope("How did the Hawks perform in the playoffs when Trae Young scored over 30 points?") == "playoffs"
 
 
+def test_extract_game_scope_all_games() -> None:
+    assert extract_game_scope("Show all games for the Lakers this season.") == "all"
+
+
 def test_extract_ranking_metric_assists() -> None:
     assert extract_ranking_metric("Who are the top players by assists?") == "assists"
 
@@ -104,6 +108,10 @@ def test_extract_ranking_limit() -> None:
     assert extract_ranking_limit("Who are the top 7 players by points?") == 7
 
 
+def test_extract_ranking_limit_caps_at_50() -> None:
+    assert extract_ranking_limit("Who are the top 99 players by points?") == 50
+
+
 def test_extract_stat_operation_sum_for_how_many_metric() -> None:
     question = "How many assists has LeBron James had from 2014 to 2024?"
     assert extract_stat_operation(question, primary_metric="assists") == "sum"
@@ -112,3 +120,8 @@ def test_extract_stat_operation_sum_for_how_many_metric() -> None:
 def test_extract_stat_operation_avg() -> None:
     question = "What is LeBron James averaging in assists this season?"
     assert extract_stat_operation(question, primary_metric="assists") == "avg"
+
+
+def test_classify_unknown_when_no_clear_analytics_signal() -> None:
+    question = "Tell me something interesting about basketball."
+    assert classify_intent(question) == IntentType.UNKNOWN
