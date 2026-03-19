@@ -40,7 +40,10 @@ def test_chart_command_saves_supported_chart(monkeypatch, tmp_path: Path) -> Non
 
     monkeypatch.setattr("cli.main.load_agent_settings", lambda: object())
     monkeypatch.setattr("cli.main.AnalyticsAgent", lambda settings: DummyAgent(response))
-    monkeypatch.setattr("cli.main.save_line_chart", lambda df, x, y, title, output_path: output_path)
+    monkeypatch.setattr(
+        "cli.main.save_line_chart",
+        lambda df, x, y, title, output_path, kind="line", y_label="Value": output_path,
+    )
 
     output_path = tmp_path / "trend.png"
     result = runner.invoke(app, ["chart", "Show the trend of the Lakers over time.", "--output-path", str(output_path)])
@@ -80,7 +83,7 @@ def test_chart_command_reports_missing_plot_dependency(monkeypatch) -> None:
     monkeypatch.setattr("cli.main.AnalyticsAgent", lambda settings: DummyAgent(response))
     monkeypatch.setattr(
         "cli.main.save_line_chart",
-        lambda df, x, y, title, output_path: (_ for _ in ()).throw(
+        lambda df, x, y, title, output_path, kind="line", y_label="Value": (_ for _ in ()).throw(
             RuntimeError("Visualization requires matplotlib and valid chart data.")
         ),
     )

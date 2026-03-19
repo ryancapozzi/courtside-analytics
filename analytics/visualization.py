@@ -14,6 +14,8 @@ class ChartPlan:
     x: str
     y: str | list[str]
     title: str
+    kind: str = "line"
+    y_label: str = "Value"
 
 
 def build_chart_plan(
@@ -43,8 +45,16 @@ def build_chart_plan(
     return None
 
 
-def save_line_chart(df: pd.DataFrame, x: str, y: str | list[str], title: str, output_path: Path) -> Path:
-    """Save a line chart for a supported query result."""
+def save_line_chart(
+    df: pd.DataFrame,
+    x: str,
+    y: str | list[str],
+    title: str,
+    output_path: Path,
+    kind: str = "line",
+    y_label: str = "Value",
+) -> Path:
+    """Save a chart for a supported query result."""
     try:
         cache_dir = Path(tempfile.gettempdir()) / "courtside-mpl-cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -57,12 +67,39 @@ def save_line_chart(df: pd.DataFrame, x: str, y: str | list[str], title: str, ou
 
         y_columns = [y] if isinstance(y, str) else list(y)
         fig, ax = plt.subplots()
-        for column in y_columns:
-            ax.plot(df[x], df[column], marker="o", label=column)
+        if kind == "bar":
+            positions = list(range(len(df[x])))
+            width = 0.8 / max(len(y_columns), 1)
+            offsets = [
+                (index - (len(y_columns) - 1) / 2) * width
+                for index in range(len(y_columns))
+            ]
+            for offset, column in zip(offsets, y_columns):
+                values = df[column].tolist()
+                bars = ax.bar(
+                    [position + offset for position in positions],
+                    values,
+                    width=width,
+                    label=column,
+                )
+                for bar, value in zip(bars, values):
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height(),
+                        f"{float(value):.2f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=9,
+                    )
+            ax.set_xticks(positions)
+            ax.set_xticklabels(df[x].tolist())
+        else:
+            for column in y_columns:
+                ax.plot(df[x], df[column], marker="o", label=column)
 
         ax.set_title(title)
         ax.set_xlabel(x.replace("_", " ").title())
-        ax.set_ylabel("Value")
+        ax.set_ylabel(y_label)
         if len(y_columns) > 1:
             ax.legend()
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -92,11 +129,15 @@ def _build_team_comparison_plan(rows: list[dict[str, object]], teams: list[str])
     if teams:
         title = " vs ".join(teams) + " Win Percentage by Season"
 
+    kind = "bar" if len(chart_df.index) == 1 else "line"
+
     return ChartPlan(
         dataframe=chart_df,
         x="season_label",
         y=y_columns,
         title=title,
+        kind=kind,
+        y_label="Win Percentage",
     )
 
 
@@ -114,6 +155,7 @@ def _build_trend_plan(rows: list[dict[str, object]], teams: list[str]) -> ChartP
         x="season_label",
         y="win_pct",
         title=title,
+        y_label="Win Percentage",
     )
 
 
@@ -132,6 +174,7 @@ def _build_player_stat_plan(rows: list[dict[str, object]], players: list[str]) -
         x="season_label",
         y="metric_value",
         title=title,
+        y_label=metric_name,
     )
 
 
@@ -149,4 +192,5 @@ def _build_player_profile_plan(rows: list[dict[str, object]], players: list[str]
         x="season_label",
         y=["avg_points", "avg_rebounds", "avg_assists"],
         title=title,
+        y_label="Average Per Game",
     )

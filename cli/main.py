@@ -147,6 +147,8 @@ def chart(
             y=plan.y,
             title=plan.title,
             output_path=Path(output_path),
+            kind=plan.kind,
+            y_label=plan.y_label,
         )
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")

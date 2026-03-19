@@ -19,6 +19,23 @@ def test_build_chart_plan_for_team_comparison() -> None:
     assert plan.y == ["Lakers", "Warriors"]
     assert "Lakers vs Warriors" in plan.title
     assert list(plan.dataframe.columns) == ["season_label", "Lakers", "Warriors"]
+    assert plan.kind == "line"
+    assert plan.y_label == "Win Percentage"
+
+
+def test_build_chart_plan_for_single_season_team_comparison_uses_bar_chart() -> None:
+    columns = ["season_label", "team_name", "games", "wins", "win_pct"]
+    rows = [
+        {"season_label": "2023-24", "team_name": "Atlanta Hawks", "games": 2, "wins": 1, "win_pct": 50.0},
+        {"season_label": "2023-24", "team_name": "Boston Celtics", "games": 2, "wins": 1, "win_pct": 50.0},
+    ]
+
+    plan = build_chart_plan(columns, rows, {"teams": ["Atlanta Hawks", "Boston Celtics"]})
+
+    assert plan is not None
+    assert plan.kind == "bar"
+    assert plan.y == ["Atlanta Hawks", "Boston Celtics"]
+    assert plan.y_label == "Win Percentage"
 
 
 def test_build_chart_plan_for_season_grouped_player_stat() -> None:
@@ -56,6 +73,7 @@ def test_build_chart_plan_for_season_grouped_player_stat() -> None:
     assert plan.y == "metric_value"
     assert "LeBron James Assists by Season" == plan.title
     assert list(plan.dataframe.columns) == ["season_label", "metric_value"]
+    assert plan.y_label == "Assists"
 
 
 def test_build_chart_plan_returns_none_for_non_chart_shape() -> None:
