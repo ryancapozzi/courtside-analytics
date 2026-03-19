@@ -52,6 +52,25 @@ def test_query_spec_builder_team_comparison_sets_grouping() -> None:
     assert spec.group_by == "season"
 
 
+def test_query_spec_builder_team_comparison_with_win_pct_metric() -> None:
+    builder = QuerySpecBuilder()
+    context = ResolvedContext(
+        teams=[
+            ResolvedEntity(id="ATL", name="Atlanta Hawks"),
+            ResolvedEntity(id="BOS", name="Boston Celtics"),
+        ],
+        primary_metric="win_pct",
+        metric_explicit=True,
+        stat_operation="avg",
+    )
+
+    spec = builder.build("Compare the Atlanta Hawks and Boston Celtics by season win percentage.", context)
+
+    assert spec.family == QueryFamily.TEAM_COMPARISON
+    assert spec.metric == "win_pct"
+    assert spec.group_by == "season"
+
+
 def test_query_spec_builder_broad_player_prompt_uses_profile_mode() -> None:
     builder = QuerySpecBuilder()
     context = ResolvedContext(

@@ -47,7 +47,7 @@ class EntityResolver:
 
         context = ResolvedContext()
         context.teams = self._resolve_teams(question, catalog)
-        context.players = self._resolve_players(question, catalog)
+        context.players = self._resolve_players(question, catalog, context.teams)
         context.seasons = self._resolve_seasons(question, catalog.seasons)
         context.thresholds = extract_thresholds(question)
         context.game_scope = extract_game_scope(question)
@@ -131,7 +131,12 @@ class EntityResolver:
 
         return self._dedupe_entities(fuzzy_matches)
 
-    def _resolve_players(self, question: str, catalog: Catalog) -> list[ResolvedEntity]:
+    def _resolve_players(
+        self,
+        question: str,
+        catalog: Catalog,
+        matched_teams: list[ResolvedEntity] | None = None,
+    ) -> list[ResolvedEntity]:
         lower_q = question.lower()
         matches: list[ResolvedEntity] = []
 
@@ -141,6 +146,9 @@ class EntityResolver:
 
         if matches:
             return self._dedupe_entities(matches)
+
+        if self._should_skip_fuzzy_player_resolution(question, matched_teams or []):
+            return []
 
         choices = [player_name for _, player_name in catalog.players]
         best = process.extract(question, choices, scorer=fuzz.WRatio, limit=2)
@@ -250,3 +258,58 @@ class EntityResolver:
     def _season_start_year(self, season_label: str) -> int:
         start = season_label.split("-", 1)[0]
         return int(start)
+
+    def _should_skip_fuzzy_player_resolution(
+        self,
+        question: str,
+        matched_teams: list[ResolvedEntity],
+    ) -> bool:
+        text = question.lower()
+
+        has_team_only_signal = any(
+            token in text
+            for token in [
+                "compare",
+                "record",
+                "win percentage",
+                "win pct",
+                "winning percentage",
+                "head to head",
+                "trend",
+                "over time",
+                "team ranking",
+                "team rankings",
+                "best record",
+                "most wins",
+                "fewest points allowed",
+                "allows the fewest points",
+                "allow the fewest points",
+                "highest win percentage",
+                "lowest points allowed",
+            ]
+        )
+        has_player_only_signal = any(
+            token in text
+            for token in [
+                "career high",
+                "stat line",
+                "per game",
+                "averaging",
+                "average",
+                "avg",
+                "profile",
+                "performance",
+                "how does",
+                "what did",
+                "player",
+                "players",
+            ]
+        )
+
+        if len(matched_teams) >= 2 and has_team_only_signal and not has_player_only_signal:
+            return True
+
+        if matched_teams and any(token in text for token in ["trend", "over time", "record"]) and not has_player_only_signal:
+            return True
+
+        return False

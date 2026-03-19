@@ -1,4 +1,5 @@
-from agent.entities import EntityResolver
+from agent.entities import Catalog, EntityResolver
+from agent.types import ResolvedEntity
 
 
 def test_resolve_seasons_this_season() -> None:
@@ -66,5 +67,29 @@ def test_resolve_seasons_unknown_year_returns_empty() -> None:
     seasons = ["2022-23", "2023-24", "2024-25"]
 
     resolved = resolver._resolve_seasons("How did they do in 2035?", seasons)
+
+    assert resolved == []
+
+
+def test_resolve_players_skips_fuzzy_boston_match_for_team_comparison() -> None:
+    resolver = EntityResolver(database_url="postgresql://unused")
+    catalog = Catalog(
+        teams=[],
+        players=[
+            ("213471", "Brandon Boston Jr."),
+            ("203530", "Lawrence Boston"),
+        ],
+        seasons=[],
+    )
+    matched_teams = [
+        ResolvedEntity(id="ATL", name="Atlanta Hawks"),
+        ResolvedEntity(id="BOS", name="Boston Celtics"),
+    ]
+
+    resolved = resolver._resolve_players(
+        "Compare the Atlanta Hawks and Boston Celtics by season win percentage.",
+        catalog,
+        matched_teams,
+    )
 
     assert resolved == []
