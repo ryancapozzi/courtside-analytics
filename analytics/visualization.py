@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
+import tempfile
 
 import pandas as pd
 
@@ -44,12 +46,29 @@ def build_chart_plan(
 def save_line_chart(df: pd.DataFrame, x: str, y: str | list[str], title: str, output_path: Path) -> Path:
     """Save a line chart for a supported query result."""
     try:
-        ax = df.plot(x=x, y=y, kind="line", title=title, marker="o")
+        cache_dir = Path(tempfile.gettempdir()) / "courtside-mpl-cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("MPLCONFIGDIR", str(cache_dir))
+
+        import matplotlib
+
+        matplotlib.use("Agg")
+        from matplotlib import pyplot as plt
+
+        y_columns = [y] if isinstance(y, str) else list(y)
+        fig, ax = plt.subplots()
+        for column in y_columns:
+            ax.plot(df[x], df[column], marker="o", label=column)
+
+        ax.set_title(title)
         ax.set_xlabel(x.replace("_", " ").title())
-        fig = ax.get_figure()
+        ax.set_ylabel("Value")
+        if len(y_columns) > 1:
+            ax.legend()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig.tight_layout()
         fig.savefig(output_path)
+        plt.close(fig)
         return output_path
     except Exception as exc:  # pragma: no cover
         raise RuntimeError("Visualization requires matplotlib and valid chart data.") from exc

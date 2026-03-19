@@ -140,13 +140,19 @@ def chart(
         console.print("Try a team trend, team comparison, or season-grouped player stat query.")
         return
 
-    chart_path = save_line_chart(
-        plan.dataframe,
-        x=plan.x,
-        y=plan.y,
-        title=plan.title,
-        output_path=Path(output_path),
-    )
+    try:
+        chart_path = save_line_chart(
+            plan.dataframe,
+            x=plan.x,
+            y=plan.y,
+            title=plan.title,
+            output_path=Path(output_path),
+        )
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        console.print("Install chart dependencies with `python -m pip install -e '.[dev]'` and retry.")
+        raise typer.Exit(code=1)
+
     console.print(f"[green]Saved chart to:[/green] {chart_path}")
 
 
