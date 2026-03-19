@@ -11,8 +11,16 @@
    - `player_game_stats.csv` or `PlayerStatistics.csv`
    - optional: `teams.csv`, `players.csv`
 
+For the current Kaggle-backed project setup, the minimum required files are:
+- `Games.csv`
+- `PlayerStatistics.csv`
+
+These files are intentionally not committed to Git, so each contributor needs to copy them into:
+- `data/raw/`
+
 ## Validate source coverage
 Run:
+- `make check-data`
 - `make profile-source`
 
 This prints season list and date range so scope automatically matches dataset coverage.

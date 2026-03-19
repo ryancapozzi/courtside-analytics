@@ -12,6 +12,8 @@ from analytics.evaluation import evaluate_results, render_markdown_report
 from analytics.visualization import build_chart_plan, save_line_chart
 from agent.config import load_agent_settings
 from agent.pipeline import AnalyticsAgent
+from data_ingestion.file_discovery import DATASET_FILE_CANDIDATES, find_existing_file
+from data_ingestion.profile_source import profile_raw_source
 
 
 app = typer.Typer(help="Courtside Analytics CLI")
@@ -59,6 +61,43 @@ def load_data() -> None:
     """Run ETL against CSVs in data/raw."""
     subprocess.run(["python3", "-m", "data_ingestion.run_etl"], check=True)
     console.print("[green]ETL run completed.[/green]")
+
+
+@app.command("check-data")
+def check_data(raw_dir: str = "data/raw") -> None:
+    """Validate required raw CSVs exist and print source coverage."""
+    raw_path = Path(raw_dir)
+    games_path = find_existing_file(raw_path, "games")
+    stats_path = find_existing_file(raw_path, "player_game_stats")
+
+    console.print(f"[bold cyan]Raw Data Check[/bold cyan]\nDirectory: {raw_path.resolve()}")
+
+    if games_path is None or stats_path is None:
+        missing: list[str] = []
+        if games_path is None:
+            missing.append(f"games file ({', '.join(DATASET_FILE_CANDIDATES['games'])})")
+        if stats_path is None:
+            missing.append(
+                "player stats file "
+                f"({', '.join(DATASET_FILE_CANDIDATES['player_game_stats'])})"
+            )
+
+        console.print(f"[red]Missing required input:[/red] {', '.join(missing)}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Found games file:[/green] {games_path.name}")
+    console.print(f"[green]Found player stats file:[/green] {stats_path.name}")
+
+    profile = profile_raw_source(raw_path)
+    console.print_json(
+        data={
+            "games_rows": profile.games_rows,
+            "player_game_stats_rows": profile.player_game_stats_rows,
+            "first_game_date": profile.first_game_date,
+            "last_game_date": profile.last_game_date,
+            "distinct_seasons": profile.distinct_seasons,
+        }
+    )
 
 
 @app.command("audit-db")
