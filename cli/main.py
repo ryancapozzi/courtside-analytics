@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from analytics.evaluation import evaluate_results, render_markdown_report
+from analytics.visualization import build_chart_plan, save_line_chart
 from agent.config import load_agent_settings
 from agent.pipeline import AnalyticsAgent
 
@@ -120,6 +121,33 @@ def evaluate(
     console.print(f"\nSaved benchmark results to: {output}")
     console.print(f"Saved benchmark summary to: {summary_path}")
     console.print(f"Saved benchmark report to: {report_path}")
+
+
+@app.command()
+def chart(
+    question: str,
+    output_path: str = "data/processed/latest_chart.png",
+) -> None:
+    """Run a supported query and save a chart for trend/comparison style outputs."""
+    settings = load_agent_settings()
+    agent = AnalyticsAgent(settings)
+
+    response = agent.answer(question)
+    plan = build_chart_plan(response.columns, response.rows, response.provenance)
+
+    if plan is None:
+        console.print("[yellow]No supported chart shape was produced for this query.[/yellow]")
+        console.print("Try a team trend, team comparison, or season-grouped player stat query.")
+        return
+
+    chart_path = save_line_chart(
+        plan.dataframe,
+        x=plan.x,
+        y=plan.y,
+        title=plan.title,
+        output_path=Path(output_path),
+    )
+    console.print(f"[green]Saved chart to:[/green] {chart_path}")
 
 
 if __name__ == "__main__":
