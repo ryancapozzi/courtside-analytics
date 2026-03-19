@@ -15,6 +15,9 @@ from .intents import (
     extract_stat_operation,
     extract_season_mentions,
     extract_thresholds,
+    has_explicit_metric,
+    has_explicit_stat_operation,
+    wants_profile_view,
 )
 from .types import ResolvedContext, ResolvedEntity
 
@@ -49,10 +52,16 @@ class EntityResolver:
         context.thresholds = extract_thresholds(question)
         context.game_scope = extract_game_scope(question)
         context.primary_metric = extract_primary_metric(question)
+        context.metric_explicit = has_explicit_metric(question)
         context.stat_operation = extract_stat_operation(question, context.primary_metric)
+        context.operation_explicit = has_explicit_stat_operation(question)
         context.ranking_metric = extract_ranking_metric(question)
         context.ranking_limit = extract_ranking_limit(question)
         context.against_mode = detect_against_mode(question)
+        context.profile_request = wants_profile_view(
+            question,
+            metric_explicit=context.metric_explicit,
+        )
 
         lower_q = question.lower()
         if "when" in lower_q and context.thresholds and not context.players:

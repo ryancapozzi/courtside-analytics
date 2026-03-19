@@ -4,6 +4,7 @@ import re
 
 from .metrics import render_metric_context
 from .ollama_client import OllamaClient
+from .query_spec import QuerySpec
 from .types import ResolvedContext, SQLPlan
 
 
@@ -19,6 +20,7 @@ class SQLFallbackGenerator:
         self,
         question: str,
         context: ResolvedContext,
+        spec: QuerySpec,
         schema_context: str,
         max_rows: int,
     ) -> SQLPlan | None:
@@ -37,6 +39,7 @@ class SQLFallbackGenerator:
                 f"Resolved players: {[player.name for player in context.players]}",
                 f"Resolved seasons: {context.seasons}",
                 f"Thresholds: {context.thresholds}",
+                f"Structured spec: {spec.describe(context)}",
                 f"Primary metric: {context.primary_metric}",
                 f"Stat operation: {context.stat_operation}",
                 f"Ranking metric: {context.ranking_metric}",

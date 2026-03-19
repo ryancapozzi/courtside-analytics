@@ -34,10 +34,13 @@ class ResolvedContext:
     thresholds: dict[str, float] = field(default_factory=dict)
     game_scope: str = "regular"
     primary_metric: str = "points"
+    metric_explicit: bool = False
     stat_operation: str = "avg"
+    operation_explicit: bool = False
     ranking_metric: str = "points"
     ranking_limit: int = 15
     against_mode: bool = False
+    profile_request: bool = False
     ambiguities: list[str] = field(default_factory=list)
 
 

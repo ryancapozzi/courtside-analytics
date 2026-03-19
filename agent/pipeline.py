@@ -4,12 +4,13 @@ from .config import AgentSettings
 from .db import QueryExecutor
 from .entities import EntityResolver
 from .insight import InsightGenerator
-from .intents import classify_intent
 from .ollama_client import OllamaClient
+from .query_spec import QuerySpec
 from .schema_context import fetch_schema_context
 from .sql_fallback import SQLFallbackGenerator
+from .spec_builder import QuerySpecBuilder
+from .spec_sql import QuerySQLBuilder
 from .sql_validator import SQLGuardrails, SQLValidationError
-from .templates import TemplateSQLBuilder
 from .types import AgentResponse, SQLPlan
 
 
@@ -29,7 +30,8 @@ class AnalyticsAgent:
 
         self.executor = QueryExecutor(settings.database_url)
         self.resolver = EntityResolver(settings.database_url)
-        self.templates = TemplateSQLBuilder()
+        self.spec_builder = QuerySpecBuilder()
+        self.queries = QuerySQLBuilder()
 
         ollama = OllamaClient(settings.ollama_base_url)
         self.fallback = SQLFallbackGenerator(ollama, settings.ollama_sql_model)
@@ -42,16 +44,12 @@ class AnalyticsAgent:
 
     def answer(self, question: str) -> AgentResponse:
         resolved = self.resolver.resolve(question)
-        intent = classify_intent(
-            question,
-            team_count=len(resolved.teams),
-            player_count=len(resolved.players),
-        )
-
-        plan = self.templates.build(intent, resolved)
+        spec = self.spec_builder.build(question, resolved)
+        intent = spec.intent
+        plan = self.queries.build(spec, resolved)
 
         if plan is None:
-            plan = self._fallback_plan(question, resolved)
+            plan = self._fallback_plan(question, resolved, spec)
             if plan is None:
                 clarification = ""
                 if resolved.ambiguities:
@@ -90,10 +88,11 @@ class AnalyticsAgent:
             )
 
         result = self.executor.run(safe_sql, plan.params)
-        answer = self.insights.summarize(question, result)
+        answer = self.insights.summarize(question, result, spec)
 
         provenance = {
             "intent": intent.value,
+            "query_family": spec.family.value,
             "source": plan.source,
             "teams": [team.name for team in resolved.teams],
             "players": [player.name for player in resolved.players],
@@ -101,10 +100,15 @@ class AnalyticsAgent:
             "thresholds": resolved.thresholds,
             "game_scope": resolved.game_scope,
             "primary_metric": resolved.primary_metric,
+            "metric_explicit": resolved.metric_explicit,
             "stat_operation": resolved.stat_operation,
+            "operation_explicit": resolved.operation_explicit,
+            "group_by": spec.group_by,
+            "response_mode": spec.response_mode,
             "ranking_metric": resolved.ranking_metric,
             "ranking_limit": resolved.ranking_limit,
             "against_mode": resolved.against_mode,
+            "profile_request": resolved.profile_request,
             "notes": plan.notes,
             "ambiguities": resolved.ambiguities,
             "row_count": len(result.rows),
@@ -120,13 +124,14 @@ class AnalyticsAgent:
             provenance=provenance,
         )
 
-    def _fallback_plan(self, question: str, resolved) -> SQLPlan | None:
+    def _fallback_plan(self, question: str, resolved, spec: QuerySpec) -> SQLPlan | None:
         schema = fetch_schema_context(self.settings.database_url, ALLOWED_TABLES)
 
         try:
             return self.fallback.build_plan(
                 question=question,
                 context=resolved,
+                spec=spec,
                 schema_context=schema,
                 max_rows=self.settings.sql_max_rows,
             )

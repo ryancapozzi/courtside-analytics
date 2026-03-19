@@ -1,5 +1,6 @@
 from agent.insight import InsightGenerator
-from agent.types import QueryResult
+from agent.query_spec import QueryFamily, QuerySpec
+from agent.types import IntentType, QueryResult
 
 
 class DummyOllama:
@@ -12,9 +13,9 @@ class NumericPreservingOllama:
         return "LeBron James recorded 688 total assists across 82 games. That equals 8.39 assists per game."
 
 
-class NumberChangingOllama:
+class HallucinatingOllama:
     def chat(self, model: str, messages: list[dict[str, str]], temperature: float = 0.0) -> str:
-        return "LeBron James recorded 700 total assists across 82 games. That equals 8.54 assists per game."
+        return "LeBron James posted 9,999 assists in every season."
 
 
 def test_deterministic_conditional_summary_uses_exact_values() -> None:
@@ -42,13 +43,22 @@ def test_deterministic_conditional_summary_uses_exact_values() -> None:
         ],
     )
 
-    text = insight.summarize("q", result)
+    spec = QuerySpec(
+        family=QueryFamily.CONDITIONAL_TEAM_PERFORMANCE,
+        intent=IntentType.CONDITIONAL_TEAM_PERFORMANCE,
+        threshold_stat="points",
+        threshold_operator=">=",
+        threshold_value=30,
+    )
+
+    text = insight.summarize("q", result, spec)
 
     assert "137-115" in text
     assert "252 games" in text
     assert "54.37%" in text
     assert "33.23" in text
     assert "119.74" in text
+    assert "30+ points" in text
 
 
 def test_deterministic_threshold_count_summary() -> None:
@@ -76,8 +86,7 @@ def test_deterministic_threshold_count_summary() -> None:
 
     text = insight.summarize("q", result)
 
-    assert "John Wall has 145 games" in text
-    assert "(points >= 25)" in text
+    assert "John Wall cleared 25+ points in 145 games" in text
     assert "31.20 points" in text
 
 
@@ -229,7 +238,7 @@ def test_player_ranking_summary_not_misread_as_profile() -> None:
 
     text = insight.summarize("q", result)
 
-    assert text.startswith("Top players from this query:")
+    assert text.startswith("Leaders in this result set")
 
 
 def test_deterministic_player_profile_summary_avg_operation() -> None:
@@ -250,6 +259,81 @@ def test_deterministic_player_profile_summary_avg_operation() -> None:
     text = insight.summarize("q", result)
 
     assert "LeBron James averaged 8.50 assists" in text
+
+
+def test_player_profile_view_summary_uses_multiple_core_stats() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "player_name",
+            "games",
+            "avg_points",
+            "avg_rebounds",
+            "avg_assists",
+            "avg_minutes",
+            "avg_turnovers",
+            "fg_pct",
+            "three_pct",
+            "ft_pct",
+        ],
+        rows=[
+            {
+                "player_name": "Stephen Curry",
+                "games": 6,
+                "avg_points": 26.67,
+                "avg_rebounds": 5.83,
+                "avg_assists": 6.67,
+                "avg_minutes": 39.5,
+                "avg_turnovers": 3.33,
+                "fg_pct": 47.2,
+                "three_pct": 39.1,
+                "ft_pct": 92.0,
+            }
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "26.67 points, 5.83 rebounds, and 6.67 assists" in text
+    assert "39.50 minutes" in text
+    assert "47.20% from the field" in text
+
+
+def test_player_season_group_summary_uses_total_language_for_sum_queries() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=[
+            "player_name",
+            "season_label",
+            "metric_name",
+            "stat_operation",
+            "games",
+            "requested_value",
+        ],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "season_label": "2018-19",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 55,
+                "requested_value": 454,
+            },
+            {
+                "player_name": "LeBron James",
+                "season_label": "2019-20",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 60,
+                "requested_value": 636,
+            },
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "season-by-season total" in text
+    assert "636 total assists" in text
 
 
 def test_rewrite_with_ollama_uses_natural_copy_when_numbers_preserved() -> None:
@@ -282,22 +366,38 @@ def test_summarize_no_rows_returns_guidance() -> None:
     assert text.startswith("No rows matched the requested criteria.")
 
 
-def test_rewrite_with_ollama_falls_back_when_numbers_change() -> None:
-    insight = InsightGenerator(NumberChangingOllama(), model="dummy")
+def test_deterministic_summary_ignores_generative_rewrite_layer() -> None:
+    insight = InsightGenerator(HallucinatingOllama(), model="dummy")
     result = QueryResult(
-        columns=["player_name", "metric_name", "stat_operation", "games", "requested_value", "per_game_value"],
+        columns=[
+            "player_name",
+            "season_label",
+            "metric_name",
+            "stat_operation",
+            "games",
+            "requested_value",
+        ],
         rows=[
             {
                 "player_name": "LeBron James",
+                "season_label": "2023-24",
                 "metric_name": "assists",
                 "stat_operation": "sum",
-                "games": 82,
-                "requested_value": 688,
-                "per_game_value": 8.39,
-            }
+                "games": 67,
+                "requested_value": 540,
+            },
+            {
+                "player_name": "LeBron James",
+                "season_label": "2024-25",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 38,
+                "requested_value": 564,
+            },
         ],
     )
 
-    text = insight.summarize("How many assists did LeBron have?", result)
+    text = insight.summarize("Show LeBron James assists by season", result)
 
-    assert text.startswith("LeBron James recorded 688 total assists")
+    assert "season-by-season total" in text
+    assert "9,999 assists" not in text

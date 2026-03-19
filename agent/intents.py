@@ -47,6 +47,10 @@ TEAM_RECORD_RE = re.compile(
     re.IGNORECASE,
 )
 PLAYER_PROFILE_RE = re.compile(r"\b(average|avg|averaging|per game|stat line|stats)\b", re.IGNORECASE)
+PLAYER_PERFORMANCE_RE = re.compile(
+    r"\b(perform|performance|production|breakdown|break down|profile|line)\b",
+    re.IGNORECASE,
+)
 PLAYER_SINGLE_GAME_HIGH_RE = re.compile(
     r"\b(career high|single game high|most .* in a game|max(?:imum)?)\b",
     re.IGNORECASE,
@@ -155,6 +159,30 @@ def extract_ranking_metric(question: str) -> str:
     return "points"
 
 
+def has_explicit_metric(question: str) -> bool:
+    text = question.lower()
+    return any(
+        token in text
+        for token in [
+            "point",
+            "assist",
+            "rebound",
+            "steal",
+            "block",
+            "turnover",
+            "minute",
+            "record",
+            "win percentage",
+            "win pct",
+            "winning percentage",
+            "points allowed",
+            "allow",
+            "defense",
+            "defensive",
+        ]
+    )
+
+
 def extract_primary_metric(question: str) -> str:
     text = question.lower()
     if "record" in text:
@@ -197,6 +225,18 @@ def detect_against_mode(question: str) -> bool:
     return " against " in f" {text} " or " vs " in f" {text} " or " versus " in f" {text} "
 
 
+def has_explicit_stat_operation(question: str) -> bool:
+    text = question.lower()
+
+    if AVERAGE_STYLE_RE.search(text) or TOTAL_STYLE_RE.search(text):
+        return True
+    if MAX_STYLE_RE.search(text) and "top" not in text and "rank" not in text:
+        return True
+    if MIN_STYLE_RE.search(text) and "top" not in text and "rank" not in text:
+        return True
+    return bool(COUNT_STAT_STYLE_RE.search(text))
+
+
 def extract_stat_operation(question: str, primary_metric: str) -> str:
     text = question.lower()
 
@@ -222,6 +262,25 @@ def extract_stat_operation(question: str, primary_metric: str) -> str:
         return "sum"
 
     return "avg"
+
+
+def wants_profile_view(question: str, *, metric_explicit: bool) -> bool:
+    if metric_explicit:
+        return False
+
+    text = question.lower()
+    if PLAYER_PROFILE_RE.search(question) or PLAYER_PERFORMANCE_RE.search(question):
+        return True
+
+    return any(
+        phrase in text
+        for phrase in [
+            "how does",
+            "how did",
+            "what kind of line",
+            "what did",
+        ]
+    )
 
 
 def _extract_implicit_thresholds(question: str) -> list[tuple[str, str, float]]:

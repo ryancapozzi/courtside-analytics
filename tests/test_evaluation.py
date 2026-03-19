@@ -32,7 +32,6 @@ def test_evaluate_results_counts_findings() -> None:
     assert len(findings) == 1
     assert findings[0]["id"] == 2
 
-
 def test_evaluate_results_handles_empty_inputs() -> None:
     summary, findings = evaluate_results([], [])
 
@@ -53,4 +52,21 @@ def test_evaluate_results_treats_missing_expected_intent_as_match() -> None:
     assert summary.intent_matches == 1
     assert summary.sql_generated == 1
     assert summary.non_empty_results == 1
+
+
+def test_evaluate_results_counts_query_spec_as_deterministic() -> None:
+    questions = [{"id": 1, "expected_intent": "player_ranking", "expected_min_rows": 1}]
+    results = [
+        {
+            "id": 1,
+            "intent": "player_ranking",
+            "sql": "SELECT 1",
+            "row_count": 5,
+            "sql_source": "query_spec",
+        }
+    ]
+
+    summary, findings = evaluate_results(questions, results)
+
+    assert summary.template_ratio == 1.0
     assert findings == []

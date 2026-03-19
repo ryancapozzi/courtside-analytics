@@ -6,6 +6,9 @@ from agent.intents import (
     extract_ranking_metric,
     extract_stat_operation,
     extract_thresholds,
+    has_explicit_metric,
+    has_explicit_stat_operation,
+    wants_profile_view,
 )
 from agent.types import IntentType
 
@@ -104,6 +107,14 @@ def test_extract_primary_metric_from_allow_points_phrase() -> None:
     assert extract_primary_metric("Which team allows the fewest points this season?") == "opponent_points"
 
 
+def test_has_explicit_metric_detects_assists() -> None:
+    assert has_explicit_metric("How many assists did LeBron James have from 2014 to 2024?")
+
+
+def test_has_explicit_metric_false_for_broad_profile_prompt() -> None:
+    assert not has_explicit_metric("How does Stephen Curry perform against the Lakers in the playoffs?")
+
+
 def test_extract_ranking_limit() -> None:
     assert extract_ranking_limit("Who are the top 7 players by points?") == 7
 
@@ -125,3 +136,14 @@ def test_extract_stat_operation_avg() -> None:
 def test_classify_unknown_when_no_clear_analytics_signal() -> None:
     question = "Tell me something interesting about basketball."
     assert classify_intent(question) == IntentType.UNKNOWN
+
+
+def test_has_explicit_stat_operation_false_for_show_by_season_prompt() -> None:
+    assert not has_explicit_stat_operation("Show LeBron James assists by season")
+
+
+def test_wants_profile_view_true_for_broad_performance_prompt() -> None:
+    assert wants_profile_view(
+        "How does Stephen Curry perform against the Lakers in the playoffs?",
+        metric_explicit=False,
+    )

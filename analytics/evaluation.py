@@ -64,7 +64,7 @@ def evaluate_results(
             )
 
     total = len(results)
-    template_count = sql_source_counter.get("template", 0)
+    template_count = sql_source_counter.get("template", 0) + sql_source_counter.get("query_spec", 0)
     template_ratio = (template_count / total) if total else 0.0
 
     summary = BenchmarkSummary(
