@@ -119,16 +119,38 @@ Use one of these paths:
 1. Real dataset (recommended): place CSVs in `data/raw/`
 2. Sample dataset: run `make sample-data`
 
+For this project, the required files are:
+- `Games.csv`
+- `PlayerStatistics.csv`
+
+These two files are not stored in GitHub. Each contributor needs their own local copy in:
+- `/Users/ryancapozzi/courtside-analytics/data/raw/`
+
 Accepted source filenames include:
 - Games: `games.csv` or `Games.csv`
 - Player stats: `player_game_stats.csv`, `PlayerStatistics.csv`, `PlayerGameStats.csv`
 - Optional refs: `teams.csv` / `players.csv`
 
+If a collaborator just needs the minimum to run the project, send them:
+- `Games.csv`
+- `PlayerStatistics.csv`
+
 See details in `docs/source_setup.md` and `data_ingestion/data_contract.md`.
+
+Quick validation:
+```bash
+make check-data
+```
+
+Or directly:
+```bash
+courtside check-data
+```
 
 ## First Run (Build DB + Load Data)
 From repo root with virtualenv active:
 ```bash
+make check-data
 make profile-source
 make setup-db
 make load-data
@@ -174,7 +196,8 @@ Question set location:
 3. Start Ollama app or `ollama serve`
 4. `cd /Users/ryancapozzi/courtside-analytics`
 5. `source .venv/bin/activate`
-6. Run `courtside ask "..."`
+6. Confirm data files exist with `make check-data`
+7. Run `courtside ask "..."`
 
 ## Stop Services
 ```bash
@@ -204,9 +227,20 @@ curl http://127.0.0.1:11434/api/tags
 
 No data in DB after load:
 ```bash
+make check-data
 make profile-source
 make load-data
 make audit-db
+```
+
+Contributor cannot find the dataset:
+```bash
+make check-data
+```
+
+If `Games.csv` or `PlayerStatistics.csv` are missing, place them in:
+```bash
+data/raw/
 ```
 
 ## Current Status

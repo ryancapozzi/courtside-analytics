@@ -1,4 +1,4 @@
-.PHONY: install lint test run-cli setup-db load-data audit-db profile-source sample-data
+.PHONY: install lint test run-cli setup-db load-data audit-db check-data profile-source sample-data
 
 install:
 	python3 -m pip install -e .[dev]
@@ -20,6 +20,9 @@ load-data:
 
 audit-db:
 	courtside audit-db
+
+check-data:
+	courtside check-data
 
 profile-source:
 	python3 -m data_ingestion.profile_source
