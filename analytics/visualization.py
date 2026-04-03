@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import ceil
 import os
 from pathlib import Path
 import tempfile
@@ -66,9 +67,11 @@ def save_line_chart(
         from matplotlib import pyplot as plt
 
         y_columns = [y] if isinstance(y, str) else list(y)
-        fig, ax = plt.subplots()
+        x_labels = [str(label) for label in df[x].tolist()]
+        x_positions = list(range(len(x_labels)))
+        figure_width = min(max(8.0, len(x_labels) * 0.85), 16.0)
+        fig, ax = plt.subplots(figsize=(figure_width, 4.8))
         if kind == "bar":
-            positions = list(range(len(df[x])))
             width = 0.8 / max(len(y_columns), 1)
             offsets = [
                 (index - (len(y_columns) - 1) / 2) * width
@@ -77,7 +80,7 @@ def save_line_chart(
             for offset, column in zip(offsets, y_columns):
                 values = df[column].tolist()
                 bars = ax.bar(
-                    [position + offset for position in positions],
+                    [position + offset for position in x_positions],
                     values,
                     width=width,
                     label=column,
@@ -91,11 +94,18 @@ def save_line_chart(
                         va="bottom",
                         fontsize=9,
                     )
-            ax.set_xticks(positions)
-            ax.set_xticklabels(df[x].tolist())
         else:
             for column in y_columns:
-                ax.plot(df[x], df[column], marker="o", label=column)
+                ax.plot(x_positions, df[column].tolist(), marker="o", label=column)
+
+        tick_positions = _select_tick_positions(x_labels)
+        rotation = 35 if len(tick_positions) < len(x_labels) or len(x_labels) > 6 else 0
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels([x_labels[index] for index in tick_positions], rotation=rotation)
+        if rotation:
+            for label in ax.get_xticklabels():
+                label.set_ha("right")
+                label.set_rotation_mode("anchor")
 
         ax.set_title(title)
         ax.set_xlabel(x.replace("_", " ").title())
@@ -194,3 +204,18 @@ def _build_player_profile_plan(rows: list[dict[str, object]], players: list[str]
         title=title,
         y_label="Average Per Game",
     )
+
+
+def _select_tick_positions(labels: list[str], max_tick_labels: int = 8) -> list[int]:
+    if not labels:
+        return []
+
+    label_count = len(labels)
+    if label_count <= max_tick_labels:
+        return list(range(label_count))
+
+    step = ceil((label_count - 1) / (max_tick_labels - 1))
+    positions = list(range(0, label_count, step))
+    if positions[-1] != label_count - 1:
+        positions.append(label_count - 1)
+    return positions

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from analytics.visualization import build_chart_plan
+from analytics.visualization import build_chart_plan, _select_tick_positions
 
 
 def test_build_chart_plan_for_team_comparison() -> None:
@@ -83,3 +83,13 @@ def test_build_chart_plan_returns_none_for_non_chart_shape() -> None:
     plan = build_chart_plan(columns, rows, {"teams": ["Lakers"]})
 
     assert plan is None
+
+
+def test_select_tick_positions_thins_dense_season_labels() -> None:
+    labels = [f"{year}-{(year + 1) % 100:02d}" for year in range(2000, 2012)]
+
+    positions = _select_tick_positions(labels, max_tick_labels=6)
+
+    assert positions == [0, 3, 6, 9, 11]
+    assert positions[0] == 0
+    assert positions[-1] == len(labels) - 1
