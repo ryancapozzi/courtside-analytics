@@ -20,16 +20,22 @@ class InsightGenerator:
         if not result.rows:
             return "No rows matched the requested criteria. Try broadening filters or clarifying the question."
 
-        templated = self._deterministic_summary(result, spec)
-        if templated is not None:
-            return templated
+        factual_summary = self._deterministic_summary(result, spec)
+        if factual_summary is not None:
+            rewritten = self._rewrite_with_ollama(question, factual_summary, spec)
+            if rewritten is not None:
+                reviewed = self._review_with_ollama(question, factual_summary, rewritten, spec)
+                return reviewed or rewritten
+            return factual_summary
 
         sample_rows = result.rows[:10]
 
         system_prompt = (
             "You are a basketball analytics writer. "
             "Write concise analyst-style insights grounded only in provided rows. "
-            "Answer the exact question asked. Do not invent data or mention unrelated metrics."
+            "Answer the exact question asked with a clear conclusion first, then supporting evidence, "
+            "and include a caveat when the sample is narrow or the scope should be stated. "
+            "Do not invent data or mention unrelated metrics."
         )
         user_prompt = "\n".join(
             [
@@ -38,7 +44,7 @@ class InsightGenerator:
                 render_metric_context(),
                 f"Columns: {result.columns}",
                 f"Rows (sample): {json.dumps(sample_rows, default=str)}",
-                "Write 1 short paragraph with key stats and one caveat if relevant.",
+                "Write 2-3 short sentences: conclusion, evidence, caveat if relevant.",
             ]
         )
 
@@ -55,8 +61,8 @@ class InsightGenerator:
             first = sample_rows[0]
             return (
                 f"Found {len(result.rows)} matching rows. "
-                f"Top row summary: {first}. "
-                "Run with a local Ollama model for richer narrative output."
+                f"The leading evidence in the first row is {first}. "
+                "Run with a local Ollama model for a more polished analyst summary."
             )
 
     def _deterministic_summary(self, result: QueryResult, spec: QuerySpec | None = None) -> str | None:
@@ -224,9 +230,11 @@ class InsightGenerator:
             win_pct = self._as_float(row.get("win_pct"))
             avg_points = self._as_float(row.get("avg_points", 0.0))
             avg_points_allowed = self._as_float(row.get("avg_points_allowed", 0.0))
+            scoring_margin = avg_points - avg_points_allowed
             return (
                 f"{team} are {wins}-{losses} across {games} games ({win_pct:.2f}% win rate), "
-                f"averaging {avg_points:.2f} points scored and {avg_points_allowed:.2f} allowed."
+                f"averaging {avg_points:.2f} points scored and {avg_points_allowed:.2f} allowed. "
+                f"That is a {scoring_margin:+.2f} scoring margin per game."
             )
 
         team_h2h_cols = {"team_a", "team_b", "games", "team_a_wins", "team_b_wins", "team_a_win_pct"}
@@ -238,45 +246,93 @@ class InsightGenerator:
             team_a_wins = self._as_int(row.get("team_a_wins"))
             team_b_wins = self._as_int(row.get("team_b_wins"))
             team_a_win_pct = self._as_float(row.get("team_a_win_pct"))
+            leader = team_a if team_a_wins >= team_b_wins else team_b
+            lead_games = abs(team_a_wins - team_b_wins)
             return (
                 f"In this scope, {team_a} vs {team_b} has produced {games} games. "
                 f"{team_a} lead {team_a_wins}-{team_b_wins} "
-                f"({team_a_win_pct:.2f}% win rate for {team_a})."
+                f"({team_a_win_pct:.2f}% win rate for {team_a}). "
+                f"{leader} hold a {lead_games}-game edge in the matchup."
             )
 
         team_ranking_cols = {"team_name", "metric_value"}
         if team_ranking_cols.issubset(cols) and result.rows:
             top = result.rows[:3]
+            label = self._ranking_label(spec, subject="team")
+            leader = top[0]
+            leader_name = self._as_text(leader.get("team_name"))
+            leader_value = self._as_float(leader.get("metric_value"))
+            if len(top) == 1:
+                return f"{leader_name} lead this result set for {label} at {leader_value:.2f}."
+
+            runner_up = top[1]
+            runner_up_name = self._as_text(runner_up.get("team_name"))
+            runner_up_value = self._as_float(runner_up.get("metric_value"))
+            gap = leader_value - runner_up_value
             parts = []
-            for idx, row in enumerate(top, start=1):
+            for row in top[2:]:
                 name = self._as_text(row.get("team_name"))
                 metric_value = self._as_float(row.get("metric_value"))
-                parts.append(f"{idx}) {name} ({metric_value:.2f})")
-            label = self._ranking_label(spec, subject="team")
-            return f"Leaders in this result set for {label}: " + ", ".join(parts) + "."
+                parts.append(f"{name} ({metric_value:.2f})")
+
+            summary = (
+                f"{leader_name} lead this result set for {label} at {leader_value:.2f}, "
+                f"ahead of {runner_up_name} by {gap:.2f}."
+            )
+            if parts:
+                summary += " Next up: " + ", ".join(parts) + "."
+            return summary
 
         ranking_cols = {"player_name", "avg_points"}
         if ranking_cols.issubset(cols) and result.rows:
             top = result.rows[:3]
-            parts = []
-            for idx, row in enumerate(top, start=1):
+            label = self._ranking_label(spec, subject="player")
+            leader = top[0]
+            leader_name = self._as_text(leader.get("player_name"))
+            leader_value = self._as_float(leader.get("metric_value", leader.get("avg_points")))
+            if len(top) == 1:
+                return f"{leader_name} lead this result set for {label} at {leader_value:.2f}."
+
+            runner_up = top[1]
+            runner_up_name = self._as_text(runner_up.get("player_name"))
+            runner_up_value = self._as_float(runner_up.get("metric_value", runner_up.get("avg_points")))
+            gap = leader_value - runner_up_value
+            trailing = []
+            for row in top[2:]:
                 name = self._as_text(row.get("player_name"))
                 metric_value = self._as_float(row.get("metric_value", row.get("avg_points")))
-                parts.append(f"{idx}) {name} ({metric_value:.2f})")
-            label = self._ranking_label(spec, subject="player")
-            return f"Leaders in this result set for {label}: " + ", ".join(parts) + "."
+                trailing.append(f"{name} ({metric_value:.2f})")
+
+            summary = (
+                f"{leader_name} lead this result set for {label} at {leader_value:.2f}, "
+                f"ahead of {runner_up_name} by {gap:.2f}."
+            )
+            if trailing:
+                summary += " Next up: " + ", ".join(trailing) + "."
+            return summary
 
         comparison_cols = {"season_label", "team_name", "games", "wins", "win_pct"}
         if comparison_cols.issubset(cols) and result.rows:
             latest = self._latest_season_rows(result.rows)
+            ordered = sorted(latest, key=lambda row: self._as_float(row.get("win_pct", 0)), reverse=True)
             parts = []
-            for row in latest:
+            for row in ordered:
                 team = self._as_text(row.get("team_name"))
                 wins = self._as_int(row.get("wins"))
                 games = self._as_int(row.get("games"))
                 win_pct = self._as_float(row.get("win_pct"))
                 parts.append(f"{team}: {wins}-{max(games - wins, 0)} ({win_pct:.2f}%)")
             season = self._as_text(latest[0].get("season_label"))
+            if len(ordered) >= 2:
+                leader = ordered[0]
+                runner_up = ordered[1]
+                gap = self._as_float(leader.get("win_pct")) - self._as_float(runner_up.get("win_pct"))
+                leader_name = self._as_text(leader.get("team_name"))
+                return (
+                    f"In the latest season in this result set ({season}), {leader_name} posted the stronger record. "
+                    + "; ".join(parts)
+                    + f". That is a {gap:.2f}-point edge in win rate over the next team."
+                )
             return f"In the latest season in this result set ({season}), " + "; ".join(parts) + "."
 
         trend_cols = {"season_label", "games", "wins", "win_pct", "avg_points"}
@@ -289,10 +345,18 @@ class InsightGenerator:
             last_win = self._as_float(last.get("win_pct"))
             delta = last_win - first_win
             direction = "up" if delta >= 0 else "down"
+            peak_row = max(result.rows, key=lambda row: self._as_float(row.get("win_pct", 0)))
+            low_row = min(result.rows, key=lambda row: self._as_float(row.get("win_pct", 0)))
+            peak_season = self._as_text(peak_row.get("season_label"))
+            low_season = self._as_text(low_row.get("season_label"))
+            peak_win = self._as_float(peak_row.get("win_pct"))
+            low_win = self._as_float(low_row.get("win_pct"))
             return (
                 f"Across {first_season} to {last_season}, win rate moved {direction} by "
                 f"{abs(delta):.2f} percentage points "
-                f"({first_win:.2f}% to {last_win:.2f}%)."
+                f"({first_win:.2f}% to {last_win:.2f}%). "
+                f"The strongest season in this sample was {peak_season} at {peak_win:.2f}%, "
+                f"and the low point was {low_season} at {low_win:.2f}%."
             )
 
         return None

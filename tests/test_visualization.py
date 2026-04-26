@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from analytics.visualization import build_chart_plan, _select_tick_positions
 
 

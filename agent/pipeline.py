@@ -46,19 +46,32 @@ class AnalyticsAgent:
         resolved = self.resolver.resolve(question)
         spec = self.spec_builder.build(question, resolved)
         intent = spec.intent
+
+        if resolved.ambiguities:
+            return AgentResponse(
+                answer=self._clarification_message(resolved.ambiguities),
+                intent=intent,
+                sql="",
+                sql_source="none",
+                columns=[],
+                rows=[],
+                provenance={
+                    "intent": intent.value,
+                    "query_family": spec.family.value,
+                    "ambiguities": resolved.ambiguities,
+                    "clarification_required": True,
+                },
+            )
+
         plan = self.queries.build(spec, resolved)
 
         if plan is None:
             plan = self._fallback_plan(question, resolved, spec)
             if plan is None:
-                clarification = ""
-                if resolved.ambiguities:
-                    clarification = f" Clarifications needed: {' '.join(resolved.ambiguities)}"
                 return AgentResponse(
                     answer=(
-                        "Could not map the question to a safe query."
-                        " Please rephrase with a clear player/team and metric."
-                        f"{clarification}"
+                        "Could not map the question to a safe query. "
+                        "Please rephrase with a clear player or team plus the metric you want analyzed."
                     ),
                     intent=intent,
                     sql="",
@@ -67,7 +80,9 @@ class AnalyticsAgent:
                     rows=[],
                     provenance={
                         "intent": intent.value,
+                        "query_family": spec.family.value,
                         "ambiguities": resolved.ambiguities,
+                        "clarification_required": False,
                     },
                 )
 
@@ -84,6 +99,7 @@ class AnalyticsAgent:
                 provenance={
                     "intent": intent.value,
                     "notes": plan.notes,
+                    "clarification_required": False,
                 },
             )
 
@@ -112,6 +128,7 @@ class AnalyticsAgent:
             "notes": plan.notes,
             "ambiguities": resolved.ambiguities,
             "row_count": len(result.rows),
+            "clarification_required": False,
         }
 
         return AgentResponse(
@@ -137,3 +154,10 @@ class AnalyticsAgent:
             )
         except Exception:
             return None
+
+    def _clarification_message(self, ambiguities: list[str]) -> str:
+        detail = " ".join(ambiguities)
+        return (
+            "I need one more detail before I can run a safe query. "
+            f"{detail} Please name the missing player or team and retry."
+        )

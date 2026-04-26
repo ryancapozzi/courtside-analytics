@@ -238,7 +238,7 @@ def test_player_ranking_summary_not_misread_as_profile() -> None:
 
     text = insight.summarize("q", result)
 
-    assert text.startswith("Leaders in this result set")
+    assert text.startswith("Nikola Jokic lead this result set")
 
 
 def test_deterministic_player_profile_summary_avg_operation() -> None:

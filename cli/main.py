@@ -28,7 +28,11 @@ def ask(question: str) -> None:
 
     response = agent.answer(question)
 
-    console.print("\n[bold cyan]Answer[/bold cyan]")
+    answer_heading = "Answer"
+    if response.provenance.get("clarification_required"):
+        answer_heading = "Needs Clarification"
+
+    console.print(f"\n[bold cyan]{answer_heading}[/bold cyan]")
     console.print(response.answer)
 
     if response.sql:
@@ -146,6 +150,10 @@ def evaluate(
         "non_empty_results": summary.non_empty_results,
         "intent_matches": summary.intent_matches,
         "template_ratio": summary.template_ratio,
+        "answers_generated": summary.answers_generated,
+        "answers_with_numeric_support": summary.answers_with_numeric_support,
+        "answers_with_scope_or_caveat": summary.answers_with_scope_or_caveat,
+        "provenance_complete": summary.provenance_complete,
         "findings_count": len(findings),
     }
 
