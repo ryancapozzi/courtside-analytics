@@ -1,4 +1,4 @@
-from analytics.evaluation import evaluate_results
+from analytics.evaluation import BenchmarkSummary, evaluate_results, render_markdown_report
 
 
 def test_evaluate_results_counts_findings() -> None:
@@ -145,3 +145,66 @@ def test_evaluate_results_flags_answer_quality_gaps() -> None:
     assert summary.answers_with_numeric_support == 0
     assert len(findings) == 1
     assert findings[0]["has_numeric_support"] is False
+
+
+def test_evaluate_results_counts_scope_language_and_complete_provenance() -> None:
+    questions = [{"id": 1, "expected_intent": "team_record_summary", "expected_min_rows": 1}]
+    results = [
+        {
+            "id": 1,
+            "intent": "team_record_summary",
+            "sql": "SELECT 1",
+            "row_count": 1,
+            "sql_source": "query_spec",
+            "answer": "Across the regular season sample, the Lakers went 47-35 with a 57.32% win rate.",
+            "provenance": {
+                "intent": "team_record_summary",
+                "query_family": "team_stat",
+                "source": "query_spec",
+                "row_count": 1,
+                "clarification_required": False,
+            },
+        }
+    ]
+
+    summary, findings = evaluate_results(questions, results)
+
+    assert summary.answers_with_numeric_support == 1
+    assert summary.answers_with_scope_or_caveat == 1
+    assert summary.provenance_complete == 1
+    assert findings == []
+
+
+def test_render_markdown_report_includes_new_quality_columns() -> None:
+    summary = BenchmarkSummary(
+        total_questions=3,
+        sql_generated=3,
+        non_empty_results=2,
+        intent_matches=2,
+        template_ratio=1.0,
+        answers_generated=2,
+        answers_with_numeric_support=1,
+        answers_with_scope_or_caveat=1,
+        provenance_complete=2,
+    )
+    findings = [
+        {
+            "id": 7,
+            "expected_intent": "player_ranking",
+            "actual_intent": "player_ranking",
+            "has_sql": True,
+            "row_count": 5,
+            "expected_min_rows": 1,
+            "has_answer": True,
+            "has_numeric_support": False,
+            "has_scope_or_caveat": False,
+            "provenance_complete": True,
+            "sql_source": "query_spec",
+        }
+    ]
+
+    report = render_markdown_report(summary, findings)
+
+    assert "Answers with numeric support" in report
+    assert "Scope/Caveat" in report
+    assert "Prov" in report

@@ -26,6 +26,11 @@ class FailingQueries:
         raise AssertionError("SQL builder should not run when clarification is required.")
 
 
+class NullQueries:
+    def build(self, spec: QuerySpec, context: ResolvedContext):
+        return None
+
+
 def test_agent_returns_clarification_before_query_planning() -> None:
     context = ResolvedContext(ambiguities=["No player detected for conditional query."])
     spec = QuerySpec(
@@ -45,3 +50,25 @@ def test_agent_returns_clarification_before_query_planning() -> None:
     assert response.sql_source == "none"
     assert response.provenance["clarification_required"] is True
     assert "No player detected" in response.answer
+
+
+def test_agent_returns_safe_rephrase_message_when_no_plan_exists() -> None:
+    context = ResolvedContext()
+    spec = QuerySpec(
+        family=QueryFamily.UNKNOWN,
+        intent=IntentType.UNKNOWN,
+    )
+
+    agent = AnalyticsAgent.__new__(AnalyticsAgent)
+    agent.settings = SimpleNamespace()
+    agent.resolver = DummyResolver(context)
+    agent.spec_builder = DummySpecBuilder(spec)
+    agent.queries = NullQueries()
+    agent._fallback_plan = lambda question, resolved, built_spec: None
+
+    response = AnalyticsAgent.answer(agent, "Tell me something neat about basketball.")
+
+    assert response.sql == ""
+    assert response.sql_source == "none"
+    assert response.provenance["clarification_required"] is False
+    assert "Please rephrase with a clear player or team plus the metric" in response.answer

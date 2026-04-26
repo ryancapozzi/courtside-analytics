@@ -18,6 +18,40 @@ class HallucinatingOllama:
         return "LeBron James posted 9,999 assists in every season."
 
 
+class ReviewApprovingOllama:
+    def chat(self, model: str, messages: list[dict[str, str]], temperature: float = 0.0) -> str:
+        system_prompt = messages[0]["content"]
+        if "answer reviewer" in system_prompt:
+            return '{"approved": true, "reason": "good", "revised_answer": ""}'
+        return (
+            "LeBron James recorded 688 total assists across 82 games. "
+            "That equals 8.39 assists per game."
+        )
+
+
+class ReviewRevisingOllama:
+    def chat(self, model: str, messages: list[dict[str, str]], temperature: float = 0.0) -> str:
+        system_prompt = messages[0]["content"]
+        if "answer reviewer" in system_prompt:
+            return (
+                '{"approved": false, "reason": "make it more direct", '
+                '"revised_answer": "LeBron James finished with 688 total assists in 82 games, '
+                'which works out to 8.39 per game."}'
+            )
+        return "LeBron James recorded 688 total assists across 82 games. That equals 8.39 assists per game."
+
+
+class ReviewBadRevisionOllama:
+    def chat(self, model: str, messages: list[dict[str, str]], temperature: float = 0.0) -> str:
+        system_prompt = messages[0]["content"]
+        if "answer reviewer" in system_prompt:
+            return (
+                '{"approved": false, "reason": "incorrect numbers", '
+                '"revised_answer": "LeBron James finished with 700 total assists in 82 games."}'
+            )
+        return "LeBron James recorded 688 total assists across 82 games. That equals 8.39 assists per game."
+
+
 def test_deterministic_conditional_summary_uses_exact_values() -> None:
     insight = InsightGenerator(DummyOllama(), model="dummy")
     result = QueryResult(
@@ -150,6 +184,7 @@ def test_deterministic_team_record_summary() -> None:
     assert "Lakers are 47-35" in text
     assert "57.32%" in text
     assert "116.20 points scored" in text
+    assert "+4.10 scoring margin per game" in text
 
 
 def test_deterministic_team_head_to_head_summary() -> None:
@@ -173,6 +208,7 @@ def test_deterministic_team_head_to_head_summary() -> None:
     assert "Lakers vs Celtics has produced 20 games" in text
     assert "12-8" in text
     assert "60.00%" in text
+    assert "4-game edge" in text
 
 
 def test_deterministic_single_game_high_summary() -> None:
@@ -239,6 +275,62 @@ def test_player_ranking_summary_not_misread_as_profile() -> None:
     text = insight.summarize("q", result)
 
     assert text.startswith("Nikola Jokic lead this result set")
+    assert "ahead of Cade Cunningham by 0.76" in text
+
+
+def test_team_ranking_summary_highlights_gap_between_top_two() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=["team_name", "metric_value"],
+        rows=[
+            {"team_name": "Boston Celtics", "metric_value": 64.5},
+            {"team_name": "Oklahoma City Thunder", "metric_value": 57.0},
+            {"team_name": "Denver Nuggets", "metric_value": 54.8},
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert text.startswith("Boston Celtics lead this result set")
+    assert "ahead of Oklahoma City Thunder by 7.50" in text
+    assert "Denver Nuggets (54.80)" in text
+
+
+def test_team_comparison_summary_calls_out_latest_leader() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=["season_label", "team_name", "games", "wins", "win_pct"],
+        rows=[
+            {"season_label": "2022-23", "team_name": "Lakers", "games": 82, "wins": 43, "win_pct": 52.44},
+            {"season_label": "2022-23", "team_name": "Warriors", "games": 82, "wins": 44, "win_pct": 53.66},
+            {"season_label": "2023-24", "team_name": "Lakers", "games": 82, "wins": 47, "win_pct": 57.32},
+            {"season_label": "2023-24", "team_name": "Warriors", "games": 82, "wins": 46, "win_pct": 56.10},
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "latest season in this result set (2023-24)" in text
+    assert "Lakers posted the stronger record" in text
+    assert "1.22-point edge in win rate" in text
+
+
+def test_trend_summary_mentions_peak_and_low_points() -> None:
+    insight = InsightGenerator(DummyOllama(), model="dummy")
+    result = QueryResult(
+        columns=["season_label", "games", "wins", "win_pct", "avg_points"],
+        rows=[
+            {"season_label": "2021-22", "games": 82, "wins": 32, "win_pct": 39.02, "avg_points": 108.1},
+            {"season_label": "2022-23", "games": 82, "wins": 44, "win_pct": 53.66, "avg_points": 117.7},
+            {"season_label": "2023-24", "games": 82, "wins": 46, "win_pct": 56.10, "avg_points": 118.9},
+        ],
+    )
+
+    text = insight.summarize("q", result)
+
+    assert "win rate moved up by 17.08 percentage points" in text
+    assert "strongest season in this sample was 2023-24 at 56.10%" in text
+    assert "low point was 2021-22 at 39.02%" in text
 
 
 def test_deterministic_player_profile_summary_avg_operation() -> None:
@@ -355,6 +447,69 @@ def test_rewrite_with_ollama_uses_natural_copy_when_numbers_preserved() -> None:
     text = insight.summarize("How many assists did LeBron have?", result)
 
     assert text.startswith("LeBron James recorded 688 total assists")
+
+
+def test_review_layer_can_explicitly_approve_rewrite() -> None:
+    insight = InsightGenerator(ReviewApprovingOllama(), model="dummy")
+    result = QueryResult(
+        columns=["player_name", "metric_name", "stat_operation", "games", "requested_value", "per_game_value"],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 82,
+                "requested_value": 688,
+                "per_game_value": 8.39,
+            }
+        ],
+    )
+
+    text = insight.summarize("How many assists did LeBron have?", result)
+
+    assert text == "LeBron James recorded 688 total assists across 82 games. That equals 8.39 assists per game."
+
+
+def test_review_layer_can_replace_rewrite_with_safe_revision() -> None:
+    insight = InsightGenerator(ReviewRevisingOllama(), model="dummy")
+    result = QueryResult(
+        columns=["player_name", "metric_name", "stat_operation", "games", "requested_value", "per_game_value"],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 82,
+                "requested_value": 688,
+                "per_game_value": 8.39,
+            }
+        ],
+    )
+
+    text = insight.summarize("How many assists did LeBron have?", result)
+
+    assert text == "LeBron James finished with 688 total assists in 82 games, which works out to 8.39 per game."
+
+
+def test_review_layer_rejects_bad_revision_and_keeps_factual_summary() -> None:
+    insight = InsightGenerator(ReviewBadRevisionOllama(), model="dummy")
+    result = QueryResult(
+        columns=["player_name", "metric_name", "stat_operation", "games", "requested_value", "per_game_value"],
+        rows=[
+            {
+                "player_name": "LeBron James",
+                "metric_name": "assists",
+                "stat_operation": "sum",
+                "games": 82,
+                "requested_value": 688,
+                "per_game_value": 8.39,
+            }
+        ],
+    )
+
+    text = insight.summarize("How many assists did LeBron have?", result)
+
+    assert text == "LeBron James recorded 688 total assists across 82 games. That is 8.39 assists per game."
 
 
 def test_summarize_no_rows_returns_guidance() -> None:
